@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="bn" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>বাংলা Text Tools Suite</title>
+  <meta name="description" content="বাংলা ভাষার জন্য সম্পূর্ণ web-based text tools — Bijoy converter, Unicode, Avro phonetic এবং আরো।" />
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- Favicon (inline SVG) -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%234f8ef7'/><text y='24' x='6' font-size='22' font-family='serif'>ব</text></svg>" />
+</head>
+<body>
+
+<!-- ─── SIDEBAR ─────────────────────────────────────── -->
+<aside class="sidebar" id="sidebar" aria-label="Tool navigation">
+  <div class="sidebar-logo">
+    <a class="logo-mark" href="#" aria-label="Bangla Text Tools Suite home">
+      <div class="logo-icon" aria-hidden="true">ব</div>
+      <div class="logo-text">
+        <span class="logo-title">বাংলা Tools</span>
+        <span class="logo-sub">Text Suite v1.0</span>
+      </div>
+    </a>
+  </div>
+
+  <nav class="sidebar-nav" id="sidebar-nav" aria-label="Tools list">
+    <!-- Built dynamically by app.js -->
+  </nav>
+
+  <div class="sidebar-footer">
+    <button class="theme-btn" id="theme-btn" aria-label="Toggle dark/light mode">
+      ☀ Light mode
+    </button>
+  </div>
+</aside>
+
+<!-- Mobile overlay -->
+<div class="sidebar-overlay" id="sidebar-overlay" aria-hidden="true"></div>
+
+<!-- ─── MAIN ────────────────────────────────────────── -->
+<main class="main" id="main">
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <button class="menu-btn" id="menu-btn" aria-label="Open sidebar menu">☰</button>
+    <div>
+      <span class="topbar-title" id="topbar-title">Bijoy → Unicode</span>
+      <span class="topbar-desc" id="topbar-desc"></span>
+    </div>
+    <div class="topbar-actions">
+      <a
+        href="https://github.com/"
+        target="_blank"
+        rel="noopener"
+        style="font-size:12px; color: var(--text3); text-decoration:none;"
+        title="GitHub"
+        aria-label="GitHub"
+      >⬡ GitHub</a>
+    </div>
+  </header>
+
+  <!-- Tool content area -->
+  <section class="tool-view" id="tool-view" aria-live="polite">
+    <!-- Rendered by app.js -->
+  </section>
+
+</main>
+
+<!-- ─── TOAST ───────────────────────────────────────── -->
+<div class="toast" id="toast" role="status" aria-live="assertive">
+  <span class="toast-icon">✓</span>
+  <span class="toast-msg">Copied!</span>
+</div>
+
+<!-- ─── SCRIPTS ─────────────────────────────────────── -->
+<script type="module" src="js/app.js"></script>
+
+</body>
+</html>
