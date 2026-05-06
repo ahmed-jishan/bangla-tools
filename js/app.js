@@ -13,7 +13,13 @@ import { analyzeText, SAMPLES as wcSamples } from './tools/word-counter.js';
 import { estimateReadingTime, AUDIENCE_PRESETS, CONTENT_TYPES, SAMPLES as rtSamples } from './tools/reading-time.js';
 import { detectEncoding, inspectCharacters, SAMPLES as encSamples } from './tools/encoding-detector.js';
 import { analyzeFrequency, SAMPLES as freqSamples } from './tools/frequency-analyzer.js';
-import { analyzeSentences, SAMPLES as sentSamples }  from './tools/sentence-counter.js';
+import { analyzeSentences, SAMPLES as sentSamples } from './tools/sentence-counter.js';
+import { cleanText, cleanWithPreset, getDiffStats, CLEANERS, PRESETS, SAMPLES as cleanSamples } from './tools/text-cleaner.js';
+import { removeDuplicateLines, removeDuplicateWords, removeDuplicateParagraphs, removeFuzzyDuplicates, MODES as dupModes, SAMPLES as dupSamples } from './tools/duplicate-remover.js';
+import { convertCase, CONVERTERS, GROUPS, getStats as caseStats, SAMPLES as caseSamples } from './tools/case-converter.js';
+import { reverseText, MODES as reverseModes, getStats as revStats, checkPalindrome, SAMPLES as revSamples } from './tools/text-reverser.js';
+import { sortLines, SORT_MODES, getStats as sortStats, SAMPLES as sortSamples } from './tools/line-sorter.js';
+import { truncateText, truncateWithPreset, getTextInfo, PRESETS as truncPresets, SAMPLES as truncSamples } from './tools/text-truncator.js';
 
 // ─── Tool Definitions ───────────────────────────────────────────────────────
 const TOOLS = [
@@ -93,7 +99,7 @@ const TOOLS = [
     category: 'analysis',
     desc: 'Bijoy / Unicode / Mixed — encoding চিহ্নিত করো',
   },
-   {
+  {
     id: 'frequency-analyzer',
     name: 'Frequency Analyzer',
     icon: '📈',
@@ -109,6 +115,57 @@ const TOOLS = [
     category: 'analysis',
     desc: 'বাক্য গণনা ও গভীর কাঠামো বিশ্লেষণ',
   },
+  {
+   id: 'text-cleaner',
+   name: 'Text Cleaner',
+   icon: '🧹',
+   tag: 'unicode',
+   category: 'clean',
+   desc: 'Invisible chars, extra space, HTML, emoji সরাও',
+   badge: 'NEW',
+ },
+ {
+   id: 'duplicate-remover',
+   name: 'Duplicate Remover',
+   icon: '✂️',
+   tag: 'unicode',
+   category: 'clean',
+   desc: 'Duplicate line, শব্দ, অনুচ্ছেদ সরাও',
+   badge: 'NEW',
+ },
+ {
+   id: 'case-converter',
+   name: 'Case Converter',
+   icon: '📐',
+   tag: 'unicode',
+   category: 'clean',
+   desc: 'UPPER, lower, Title, camelCase, snake_case...',
+   badge: 'NEW',
+ },
+ {
+   id: 'text-reverser',
+   name: 'Text Reverser',
+   icon: '↩️',
+   tag: 'unicode',
+   category: 'writing',
+   desc: 'অক্ষর, শব্দ, লাইন, বাক্য উল্টো করো',
+ },
+ {
+   id: 'line-sorter',
+   name: 'Line Sorter',
+   icon: '🔀',
+   tag: 'unicode',
+   category: 'writing',
+   desc: 'বর্ণানুক্রম, দৈর্ঘ্য, সংখ্যা, random sort',
+ },
+ {
+   id: 'text-truncator',
+   name: 'Text Truncator',
+   icon: '✂️',
+   tag: 'unicode',
+   category: 'writing',
+   desc: 'অক্ষর, শব্দ, বাক্য, byte — নির্দিষ্ট limit এ কাটো',
+ },
 
 ];
 
@@ -227,6 +284,12 @@ function renderTool(id) {
   else if (id === 'encoding-detector') renderEncodingDetector(view);
   else if (id === 'frequency-analyzer') renderFrequencyAnalyzer(view);
   else if (id === 'sentence-counter') renderSentenceCounter(view);
+  else if (id === 'text-cleaner')       renderTextCleaner(view);
+  else if (id === 'duplicate-remover')  renderDuplicateRemover(view);
+  else if (id === 'case-converter')     renderCaseConverter(view);
+  else if (id === 'text-reverser')      renderTextReverser(view);
+  else if (id === 'line-sorter')        renderLineSorter(view);
+  else if (id === 'text-truncator')     renderTextTruncator(view);
   else view.innerHTML = `<p>Tool not found.</p>`;
 }
 
@@ -276,8 +339,40 @@ function renderBijoyToUnicode(container) {
   `;
   container.appendChild(el);
 
-  // Samples
+  // ---------- Toast message helper ----------
+  let toastEl = null;
+  function showToast(msg, isError = false) {
+    if (!toastEl) {
+      toastEl = document.createElement('div');
+      toastEl.className = 'toast-notif';
+      toastEl.style.cssText = `
+        position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+        background: #2e7d32; color: white; padding: 8px 16px; border-radius: 40px;
+        font-size: 13px; z-index: 10000; opacity: 0; transition: opacity 0.2s;
+        pointer-events: none; font-family: var(--font-ui);
+      `;
+      document.body.appendChild(toastEl);
+    }
+    toastEl.textContent = msg;
+    toastEl.style.background = isError ? '#d32f2f' : '#2e7d32';
+    toastEl.style.opacity = '1';
+    setTimeout(() => { toastEl.style.opacity = '0'; }, 2000);
+  }
+
+  // ---------- Copy to clipboard with toast ----------
+  function copyText(text) {
+    if (!text) {
+      showToast('কপি করার জন্য কোনো টেক্সট নেই', true);
+      return;
+    }
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('ক্লিপবোর্ডে কপি হয়েছে!');
+    }).catch(() => showToast('কপি করতে ব্যর্থ', true));
+  }
+
+  // ---------- Samples ― using imported SAMPLES from module ----------
   const samplesEl = el.querySelector('#b2u-samples');
+  // Use the SAMPLES array exported from your improved module
   b2uSamples.forEach(s => {
     const chip = document.createElement('button');
     chip.className = 'sample-chip';
@@ -289,37 +384,55 @@ function renderBijoyToUnicode(container) {
     samplesEl.appendChild(chip);
   });
 
-  // Live conversion
+  // ---------- DOM elements ----------
   const inputEl = el.querySelector('#b2u-input');
-  inputEl.addEventListener('input', doConvert);
-  el.querySelector('#b2u-convert').addEventListener('click', doConvert);
-  el.querySelector('#b2u-copy').addEventListener('click', () => {
-    copyText(el.querySelector('#b2u-output').value);
-  });
-  el.querySelector('#b2u-clear').addEventListener('click', () => {
-    inputEl.value = '';
-    el.querySelector('#b2u-output').value = '';
-    updateStats({});
-  });
-  el.querySelector('#b2u-swap').addEventListener('click', () => activateTool('unicode-to-bijoy'));
+  const outputEl = el.querySelector('#b2u-output');
+  const convertBtn = el.querySelector('#b2u-convert');
+  const copyBtn = el.querySelector('#b2u-copy');
+  const clearBtn = el.querySelector('#b2u-clear');
+  const swapBtn = el.querySelector('#b2u-swap');
 
+  // ---------- Conversion function (uses improved module) ----------
   function doConvert() {
     const input = inputEl.value;
+    if (!input.trim()) {
+      outputEl.value = '';
+      updateStats({ words: 0, chars: 0, banglaChars: 0, originalLen: 0 });
+      return;
+    }
     const output = bijoyToUnicode(input);
-    el.querySelector('#b2u-output').value = output;
+    outputEl.value = output;
     const stats = b2uStats(input, output);
-    el.querySelector('#b2u-words').textContent = stats.words;
-    el.querySelector('#b2u-chars').textContent = stats.chars;
-    el.querySelector('#b2u-bengali').textContent = stats.banglaChars;
-    el.querySelector('#b2u-orig').textContent = stats.originalLen;
+    updateStats(stats);
   }
 
-  function updateStats(s) {
-    ['words', 'chars', 'bengali', 'orig'].forEach(k => {
-      const el2 = el.querySelector(`#b2u-${k}`);
-      if (el2) el2.textContent = s[k] ?? 0;
-    });
+  function updateStats(stats) {
+    el.querySelector('#b2u-words').textContent = stats.words ?? 0;
+    el.querySelector('#b2u-chars').textContent = stats.chars ?? 0;
+    el.querySelector('#b2u-bengali').textContent = stats.banglaChars ?? 0;
+    el.querySelector('#b2u-orig').textContent = stats.originalLen ?? 0;
   }
+
+  // ---------- Event listeners ----------
+  inputEl.addEventListener('input', doConvert);
+  convertBtn.addEventListener('click', doConvert);
+  copyBtn.addEventListener('click', () => copyText(outputEl.value));
+  clearBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    outputEl.value = '';
+    updateStats({ words: 0, chars: 0, banglaChars: 0, originalLen: 0 });
+  });
+  swapBtn.addEventListener('click', () => {
+    // If you have another tool named 'unicode-to-bijoy', activate it
+    if (typeof activateTool === 'function') {
+      activateTool('unicode-to-bijoy');
+    } else {
+      showToast('Unicode → Bijoy tool coming soon', true);
+    }
+  });
+
+  // Initial empty state
+  doConvert();
 }
 
 // ── Unicode → Bijoy ──
@@ -918,7 +1031,7 @@ function renderDateConverter(container) {
 
 // RENDER: Word Counter
 // ═══════════════════════════════════════════════════════════════════
- 
+
 function renderWordCounter(container) {
   const el = document.createElement('div');
   el.className = 'tool-card';
@@ -940,15 +1053,15 @@ function renderWordCounter(container) {
         gap: 10px; margin-top: 14px;
       ">
         ${[
-          ['wc-graphemes',  'অক্ষর (সঠিক)',     '0', 'green'],
-          ['wc-words',      'শব্দ',              '0', 'blue'],
-          ['wc-sentences',  'বাক্য',             '0', 'amber'],
-          ['wc-paragraphs', 'অনুচ্ছেদ',          '0', 'purple'],
-          ['wc-unique',     'অনন্য শব্দ',        '0', 'teal'],
-          ['wc-diversity',  'Lexical Diversity', '0%', 'coral'],
-          ['wc-bytes',      'Bytes (UTF-8)',      '0', 'gray'],
-          ['wc-lines',      'লাইন',              '0', 'gray'],
-        ].map(([id, label, val, color]) => `
+      ['wc-graphemes', 'অক্ষর (সঠিক)', '0', 'green'],
+      ['wc-words', 'শব্দ', '0', 'blue'],
+      ['wc-sentences', 'বাক্য', '0', 'amber'],
+      ['wc-paragraphs', 'অনুচ্ছেদ', '0', 'purple'],
+      ['wc-unique', 'অনন্য শব্দ', '0', 'teal'],
+      ['wc-diversity', 'Lexical Diversity', '0%', 'coral'],
+      ['wc-bytes', 'Bytes (UTF-8)', '0', 'gray'],
+      ['wc-lines', 'লাইন', '0', 'gray'],
+    ].map(([id, label, val, color]) => `
           <div class="stat-box stat-${color}" id="${id}">
             <p class="stat-box-label">${label}</p>
             <p class="stat-box-val">${val}</p>
@@ -968,7 +1081,7 @@ function renderWordCounter(container) {
       </div>
     </div>
   `;
- 
+
   // Stat box styles
   const style = document.createElement('style');
   style.textContent = `
@@ -991,7 +1104,7 @@ function renderWordCounter(container) {
   `;
   container.appendChild(style);
   container.appendChild(el);
- 
+
   // Samples
   const samplesEl = el.querySelector('#wc-samples');
   wcSamples.forEach(s => {
@@ -1001,28 +1114,28 @@ function renderWordCounter(container) {
     chip.addEventListener('click', () => { inputEl.value = s.text; doAnalyze(); });
     samplesEl.appendChild(chip);
   });
- 
+
   const inputEl = el.querySelector('#wc-input');
   inputEl.addEventListener('input', doAnalyze);
- 
+
   function setVal(id, val) {
     const el2 = el.querySelector(`#${id} .stat-box-val`);
     if (el2) el2.textContent = val;
   }
- 
+
   function doAnalyze() {
     const text = inputEl.value;
     const stats = analyzeText(text);
- 
-    setVal('wc-graphemes',  stats.graphemes.toLocaleString('bn'));
-    setVal('wc-words',      stats.words.toLocaleString('bn'));
-    setVal('wc-sentences',  stats.sentences.toLocaleString('bn'));
+
+    setVal('wc-graphemes', stats.graphemes.toLocaleString('bn'));
+    setVal('wc-words', stats.words.toLocaleString('bn'));
+    setVal('wc-sentences', stats.sentences.toLocaleString('bn'));
     setVal('wc-paragraphs', stats.paragraphs.toLocaleString('bn'));
-    setVal('wc-unique',     stats.uniqueWords.toLocaleString('bn'));
-    setVal('wc-diversity',  stats.lexicalDiversity + '%');
-    setVal('wc-bytes',      stats.bytes.toLocaleString());
-    setVal('wc-lines',      stats.lines.toLocaleString('bn'));
- 
+    setVal('wc-unique', stats.uniqueWords.toLocaleString('bn'));
+    setVal('wc-diversity', stats.lexicalDiversity + '%');
+    setVal('wc-bytes', stats.bytes.toLocaleString());
+    setVal('wc-lines', stats.lines.toLocaleString('bn'));
+
     // Language bar
     const langBar = el.querySelector('#wc-lang-bar');
     if (text.trim()) {
@@ -1031,19 +1144,19 @@ function renderWordCounter(container) {
       const legend = el.querySelector('#wc-lang-legend');
       const r = stats.langRatio;
       visual.innerHTML = `
-        ${r.bangla  ? `<div style="flex:${r.bangla};  background:#34d399; border-radius:20px;"></div>` : ''}
+        ${r.bangla ? `<div style="flex:${r.bangla};  background:#34d399; border-radius:20px;"></div>` : ''}
         ${r.english ? `<div style="flex:${r.english}; background:#4f8ef7; border-radius:20px;"></div>` : ''}
-        ${r.digit   ? `<div style="flex:${r.digit};   background:#fbbf24; border-radius:20px;"></div>` : ''}
+        ${r.digit ? `<div style="flex:${r.digit};   background:#fbbf24; border-radius:20px;"></div>` : ''}
       `;
       legend.innerHTML = `
-        ${r.bangla  ? `<span style="font-size:12px;color:var(--text3)"><span style="color:#34d399">●</span> বাংলা ${r.bangla}%</span>` : ''}
+        ${r.bangla ? `<span style="font-size:12px;color:var(--text3)"><span style="color:#34d399">●</span> বাংলা ${r.bangla}%</span>` : ''}
         ${r.english ? `<span style="font-size:12px;color:var(--text3)"><span style="color:#4f8ef7">●</span> English ${r.english}%</span>` : ''}
-        ${r.digit   ? `<span style="font-size:12px;color:var(--text3)"><span style="color:#fbbf24">●</span> সংখ্যা ${r.digit}%</span>` : ''}
+        ${r.digit ? `<span style="font-size:12px;color:var(--text3)"><span style="color:#fbbf24">●</span> সংখ্যা ${r.digit}%</span>` : ''}
       `;
     } else {
       langBar.style.display = 'none';
     }
- 
+
     // Top words
     const twEl = el.querySelector('#wc-topwords');
     const twList = el.querySelector('#wc-topwords-list');
@@ -1057,16 +1170,16 @@ function renderWordCounter(container) {
     }
   }
 }
- 
- 
+
+
 // ═══════════════════════════════════════════════════════════════════
 // RENDER: Reading Time
 // ═══════════════════════════════════════════════════════════════════
- 
+
 function renderReadingTime(container) {
   let selectedAudience = 'professional';
   let selectedContent = 'article';
- 
+
   const el = document.createElement('div');
   el.className = 'tool-card';
   el.innerHTML = `
@@ -1117,7 +1230,7 @@ function renderReadingTime(container) {
       </div>
     </div>
   `;
- 
+
   const rtStyle = document.createElement('style');
   rtStyle.textContent = `
     .rt-preset-btn { display:flex;align-items:center;gap:7px;padding:7px 10px;
@@ -1136,7 +1249,7 @@ function renderReadingTime(container) {
   `;
   container.appendChild(rtStyle);
   container.appendChild(el);
- 
+
   // Build audience buttons
   const audEl = el.querySelector('#rt-audience');
   Object.entries(AUDIENCE_PRESETS).forEach(([key, preset]) => {
@@ -1152,7 +1265,7 @@ function renderReadingTime(container) {
     });
     audEl.appendChild(btn);
   });
- 
+
   // Build content type buttons
   const contEl = el.querySelector('#rt-content');
   Object.entries(CONTENT_TYPES).forEach(([key, ct]) => {
@@ -1168,7 +1281,7 @@ function renderReadingTime(container) {
     });
     contEl.appendChild(btn);
   });
- 
+
   // Samples
   const samplesEl = el.querySelector('#rt-samples');
   rtSamples.forEach(s => {
@@ -1178,24 +1291,24 @@ function renderReadingTime(container) {
     chip.addEventListener('click', () => { inputEl.value = s.text; doEstimate(); });
     samplesEl.appendChild(chip);
   });
- 
+
   const inputEl = el.querySelector('#rt-input');
   inputEl.addEventListener('input', doEstimate);
- 
+
   function doEstimate() {
     const text = inputEl.value;
     if (!text.trim()) { el.querySelector('#rt-result').style.display = 'none'; return; }
- 
+
     const result = estimateReadingTime(text, selectedAudience, selectedContent);
     if (!result) return;
- 
+
     el.querySelector('#rt-result').style.display = 'block';
     el.querySelector('#rt-time-main').textContent = result.readingTime.formatted;
     el.querySelector('#rt-time-wpm').textContent = `${result.wpmUsed} শব্দ/মিনিট · ${result.words} শব্দ`;
     el.querySelector('#rt-speech-normal').textContent = result.speechTime.normal.formatted;
     el.querySelector('#rt-pages').textContent = `${result.pages} পৃষ্ঠা`;
     el.querySelector('#rt-lines-est').textContent = `~${result.a4Lines} লাইন (A4)`;
- 
+
     el.querySelector('#rt-speed-breakdown').innerHTML = `
       <div class="speed-item"><span class="speed-label">ধীরে পড়লে</span><span class="speed-val">${result.speechTime.slow.formatted}</span></div>
       <div class="speed-item"><span class="speed-label">স্বাভাবিক</span><span class="speed-val">${result.readingTime.formatted}</span></div>
@@ -1203,12 +1316,12 @@ function renderReadingTime(container) {
     `;
   }
 }
- 
- 
+
+
 // ═══════════════════════════════════════════════════════════════════
 // RENDER: Encoding Detector
 // ═══════════════════════════════════════════════════════════════════
- 
+
 function renderEncodingDetector(container) {
   const el = document.createElement('div');
   el.className = 'tool-card';
@@ -1252,7 +1365,7 @@ function renderEncodingDetector(container) {
       </div>
     </div>
   `;
- 
+
   const encStyle = document.createElement('style');
   encStyle.textContent = `
     .enc-count-box { background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);
@@ -1277,7 +1390,7 @@ function renderEncodingDetector(container) {
   `;
   container.appendChild(encStyle);
   container.appendChild(el);
- 
+
   // Samples
   const samplesEl = el.querySelector('#enc-samples');
   encSamples.forEach(s => {
@@ -1287,60 +1400,60 @@ function renderEncodingDetector(container) {
     chip.addEventListener('click', () => { inputEl.value = s.text; doDetect(); });
     samplesEl.appendChild(chip);
   });
- 
+
   const inputEl = el.querySelector('#enc-input');
   inputEl.addEventListener('input', doDetect);
- 
+
   const ENCODING_STYLES = {
-    UNICODE_BENGALI: { icon:'✅', borderColor:'#34d39950', bg:'var(--green-dim)' },
-    BIJOY:           { icon:'⚠️', borderColor:'#fbbf2450', bg:'var(--amber-dim)' },
-    MIXED:           { icon:'🔴', borderColor:'#f8717150', bg:'var(--red-dim)' },
-    AVRO_PHONETIC:   { icon:'⌨️', borderColor:'#4f8ef750', bg:'var(--accent-dim)' },
-    ASCII:           { icon:'ℹ️', borderColor:'var(--border2)', bg:'var(--bg3)' },
-    UNKNOWN:         { icon:'❓', borderColor:'var(--border2)', bg:'var(--bg3)' },
+    UNICODE_BENGALI: { icon: '✅', borderColor: '#34d39950', bg: 'var(--green-dim)' },
+    BIJOY: { icon: '⚠️', borderColor: '#fbbf2450', bg: 'var(--amber-dim)' },
+    MIXED: { icon: '🔴', borderColor: '#f8717150', bg: 'var(--red-dim)' },
+    AVRO_PHONETIC: { icon: '⌨️', borderColor: '#4f8ef750', bg: 'var(--accent-dim)' },
+    ASCII: { icon: 'ℹ️', borderColor: 'var(--border2)', bg: 'var(--bg3)' },
+    UNKNOWN: { icon: '❓', borderColor: 'var(--border2)', bg: 'var(--bg3)' },
   };
- 
+
   function doDetect() {
     const text = inputEl.value;
     const resultEl = el.querySelector('#enc-result');
     if (!text.trim()) { resultEl.style.display = 'none'; return; }
- 
+
     const result = detectEncoding(text);
     if (!result) return;
     resultEl.style.display = 'block';
- 
+
     const style = ENCODING_STYLES[result.primaryEncoding] || ENCODING_STYLES.UNKNOWN;
     const verdictEl = el.querySelector('#enc-verdict');
     verdictEl.style.borderColor = style.borderColor;
     verdictEl.style.background = style.bg;
     el.querySelector('#enc-verdict-icon').textContent = style.icon;
-    el.querySelector('#enc-verdict-type').textContent = result.primaryEncoding.replace(/_/g,' ');
+    el.querySelector('#enc-verdict-type').textContent = result.primaryEncoding.replace(/_/g, ' ');
     el.querySelector('#enc-verdict-desc').textContent = result.description;
- 
+
     const confEl = el.querySelector('#enc-confidence');
-    const confColors = { high:'var(--green-dim)', medium:'var(--amber-dim)', low:'var(--red-dim)' };
+    const confColors = { high: 'var(--green-dim)', medium: 'var(--amber-dim)', low: 'var(--red-dim)' };
     confEl.style.background = confColors[result.confidence];
     confEl.textContent = result.confidenceScore.label;
- 
+
     el.querySelector('#enc-recommendation').textContent = '💡 ' + result.recommendation;
     el.querySelector('#enc-recommendation').style.background = 'rgba(0,0,0,0.1)';
- 
+
     // Char counts
     const countsEl = el.querySelector('#enc-char-counts');
     countsEl.innerHTML = [
       ['unicodeBengali', 'Unicode বাংলা', result.classes.unicodeBengali],
-      ['bijoySignature', 'Bijoy chars',   result.classes.bijoySignature],
-      ['latinAscii',     'Latin/ASCII',   result.classes.latinAscii],
-      ['whitespace',     'Whitespace',    result.classes.whitespace],
-      ['totalChars',     'মোট অক্ষর',    result.totalChars],
-      ['byteSize',       'Bytes (UTF-8)', result.byteSize],
+      ['bijoySignature', 'Bijoy chars', result.classes.bijoySignature],
+      ['latinAscii', 'Latin/ASCII', result.classes.latinAscii],
+      ['whitespace', 'Whitespace', result.classes.whitespace],
+      ['totalChars', 'মোট অক্ষর', result.totalChars],
+      ['byteSize', 'Bytes (UTF-8)', result.byteSize],
     ].map(([key, label, val]) => `
       <div class="enc-count-box">
         <p class="enc-count-label">${label}</p>
         <p class="enc-count-val">${val.toLocaleString()}</p>
       </div>
     `).join('');
- 
+
     // Normalization
     const normEl = el.querySelector('#enc-normalization');
     if (result.normalization) {
@@ -1351,7 +1464,7 @@ function renderEncodingDetector(container) {
           ${result.normalization.description ? ` — ${result.normalization.description}` : ''}</span>
         </div>`;
     }
- 
+
     // Hidden chars
     const hiddenEl = el.querySelector('#enc-hidden-chars');
     if (result.zeroWidthChars.length > 0) {
@@ -1364,7 +1477,7 @@ function renderEncodingDetector(container) {
     } else {
       hiddenEl.innerHTML = '';
     }
- 
+
     // Problematic patterns
     const issuesEl = el.querySelector('#enc-issues');
     if (result.problematicPatterns.length > 0) {
@@ -1376,7 +1489,7 @@ function renderEncodingDetector(container) {
     } else {
       issuesEl.innerHTML = `<div class="issue-badge issue-info"><span>✅</span><span>কোনো সমস্যাজনক pattern পাওয়া যায়নি</span></div>`;
     }
- 
+
     // Character inspector
     const inspWrap = el.querySelector('#enc-inspector-wrap');
     const inspEl = el.querySelector('#enc-inspector');
@@ -1416,12 +1529,12 @@ function renderFrequencyAnalyzer(container) {
 
       <div style="display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap;">
         <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;" id="freq-tabs">
-          ${[['words','শব্দ'],['chars','অক্ষর'],['bigrams','বাক্যাংশ'],['collocations','সহাবস্থান']].map(([id,label]) => `
+          ${[['words', 'শব্দ'], ['chars', 'অক্ষর'], ['bigrams', 'বাক্যাংশ'], ['collocations', 'সহাবস্থান']].map(([id, label]) => `
             <button class="freq-tab${id === 'words' ? ' active' : ''}" data-tab="${id}">${label}</button>
           `).join('')}
         </div>
         <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;" id="freq-lang">
-          ${[['all','সব'],['bangla','বাংলা'],['english','English']].map(([id,label]) => `
+          ${[['all', 'সব'], ['bangla', 'বাংলা'], ['english', 'English']].map(([id, label]) => `
             <button class="freq-tab${id === 'all' ? ' active' : ''}" data-lang="${id}">${label}</button>
           `).join('')}
         </div>
@@ -1529,26 +1642,26 @@ function renderFrequencyAnalyzer(container) {
     let rows = [];
     let filename = '';
     if (activeTab === 'words') {
-      rows = [['Rank','Word','Count','Percentage']];
+      rows = [['Rank', 'Word', 'Count', 'Percentage']];
       lastResult.wordFreq.forEach(f => rows.push([f.rank, f.item, f.count, f.pct]));
       filename = 'word_frequency.csv';
     } else if (activeTab === 'chars') {
-      rows = [['Rank','Character','Count','Percentage']];
+      rows = [['Rank', 'Character', 'Count', 'Percentage']];
       lastResult.charFreq.forEach(f => rows.push([f.rank, f.item, f.count, f.pct]));
       filename = 'char_frequency.csv';
     } else if (activeTab === 'bigrams') {
-      rows = [['Rank','Bigram','Count','Percentage']];
+      rows = [['Rank', 'Bigram', 'Count', 'Percentage']];
       lastResult.ngram.freq.forEach(f => rows.push([f.rank, f.item, f.count, f.pct]));
       filename = 'bigram_frequency.csv';
     } else if (activeTab === 'collocations') {
       const coll = lastResult.ngram.collocations;
       if (!coll.length) { showToast('কোনো সহাবস্থান পাওয়া যায়নি', true); return; }
-      rows = [['Rank','Bigram','Count','PMI']];
-      coll.forEach((c, idx) => rows.push([idx+1, c.bigram, c.count, c.pmi]));
+      rows = [['Rank', 'Bigram', 'Count', 'PMI']];
+      coll.forEach((c, idx) => rows.push([idx + 1, c.bigram, c.count, c.pmi]));
       filename = 'collocations.csv';
     }
     const csv = rows.map(row => row.join(',')).join('\n');
-    const blob = new Blob([csv], {type: 'text/csv'});
+    const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -1592,7 +1705,7 @@ function renderFrequencyAnalyzer(container) {
       <div class="freq-summary-stat"><span class="freq-summary-label">TTR (Type/Token)</span><span class="freq-summary-val">${lex.typeTokenRatio}</span></div>
       <div class="freq-summary-stat"><span class="freq-summary-label">গড় শব্দ দৈর্ঘ্য</span><span class="freq-summary-val">${read.avgWordLength}</span></div>
       <div class="freq-summary-stat"><span class="freq-summary-label">গড় বাক্য দৈর্ঘ্য</span><span class="freq-summary-val">${read.avgSentenceLength}</span></div>
-      <div class="freq-summary-stat"><span class="freq-summary-label">Zipf fit</span><span class="freq-summary-val">${r.summary.zipfScore !== null ? r.summary.zipfScore+'%' : '—'}</span></div>
+      <div class="freq-summary-stat"><span class="freq-summary-label">Zipf fit</span><span class="freq-summary-val">${r.summary.zipfScore !== null ? r.summary.zipfScore + '%' : '—'}</span></div>
     `;
 
     let data, colorFn, isCollocation = false;
@@ -1624,7 +1737,7 @@ function renderFrequencyAnalyzer(container) {
       const barsEl = chartEl.querySelector('#freq-bars');
       barsEl.innerHTML = coll.map((c, idx) => `
         <div class="freq-bar-row" data-copy="${c.bigram.replace(/"/g, '&quot;')}">
-          <span class="freq-bar-rank">${idx+1}</span>
+          <span class="freq-bar-rank">${idx + 1}</span>
           <span class="freq-bar-item">${c.bigram}</span>
           <div class="freq-bar-track"><div class="freq-bar-fill" style="width:${Math.min(100, (c.pmi / 10) * 100)}%;background:#a855f7;"></div></div>
           <span class="freq-bar-count">${c.count}x</span>
@@ -1651,7 +1764,7 @@ function renderFrequencyAnalyzer(container) {
       <div class="freq-bar-row" data-copy="${e.item.replace(/"/g, '&quot;')}">
         <span class="freq-bar-rank">${e.rank}</span>
         <span class="freq-bar-item">${e.item}</span>
-        <div class="freq-bar-track"><div class="freq-bar-fill" style="width:${(e.count/maxCount)*100}%;background:${colorFn(e,i)};"></div></div>
+        <div class="freq-bar-track"><div class="freq-bar-fill" style="width:${(e.count / maxCount) * 100}%;background:${colorFn(e, i)};"></div></div>
         <span class="freq-bar-count">${e.count}x</span>
         <span class="freq-bar-pct">${e.pct}%</span>
       </div>
@@ -1679,15 +1792,15 @@ function renderFrequencyAnalyzer(container) {
   // initial empty state
   doAnalyze();
 }
- 
- 
+
+
 // ═══════════════════════════════════════════════════════════════════
 // RENDER: Sentence Counter
 // ═══════════════════════════════════════════════════════════════════
- 
+
 function renderSentenceCounter(container) {
   let showDetail = false;
- 
+
   const el = document.createElement('div');
   el.className = 'tool-card';
   el.innerHTML = `
@@ -1704,7 +1817,7 @@ function renderSentenceCounter(container) {
       <div id="sent-result" style="margin-top:16px;display:none;"></div>
     </div>
   `;
- 
+
   // Styles
   const style = document.createElement('style');
   style.textContent = `
@@ -1738,7 +1851,7 @@ function renderSentenceCounter(container) {
   `;
   container.appendChild(style);
   container.appendChild(el);
- 
+
   // Samples
   const samplesEl = el.querySelector('#sent-samples');
   sentSamples.forEach(s => {
@@ -1748,48 +1861,48 @@ function renderSentenceCounter(container) {
     chip.addEventListener('click', () => { inputEl.value = s.text; doAnalyze(); });
     samplesEl.appendChild(chip);
   });
- 
+
   const inputEl = el.querySelector('#sent-input');
   inputEl.addEventListener('input', doAnalyze);
- 
+
   const TYPE_COLORS = {
     'সরল': '#34d399', 'যৌগিক': '#4f8ef7', 'জটিল': '#a78bfa',
     'প্রশ্নবোধক': '#fbbf24', 'বিস্ময়বোধক': '#f87171',
   };
- 
+
   const READABILITY_COLORS = {
-    green: { bg:'var(--green-dim)', border:'#34d39960', text:'var(--green)' },
-    teal:  { bg:'rgba(20,184,166,.12)', border:'rgba(20,184,166,.4)', text:'#14b8a6' },
-    amber: { bg:'var(--amber-dim)', border:'#fbbf2460', text:'var(--amber)' },
-    orange:{ bg:'rgba(251,146,60,.12)', border:'rgba(251,146,60,.4)', text:'#fb923c' },
-    red:   { bg:'var(--red-dim)', border:'#f8717160', text:'var(--red)' },
+    green: { bg: 'var(--green-dim)', border: '#34d39960', text: 'var(--green)' },
+    teal: { bg: 'rgba(20,184,166,.12)', border: 'rgba(20,184,166,.4)', text: '#14b8a6' },
+    amber: { bg: 'var(--amber-dim)', border: '#fbbf2460', text: 'var(--amber)' },
+    orange: { bg: 'rgba(251,146,60,.12)', border: 'rgba(251,146,60,.4)', text: '#fb923c' },
+    red: { bg: 'var(--red-dim)', border: '#f8717160', text: 'var(--red)' },
   };
- 
+
   function doAnalyze() {
     const text = inputEl.value;
     const resultEl = el.querySelector('#sent-result');
     if (!text.trim()) { resultEl.style.display = 'none'; return; }
- 
+
     const r = analyzeSentences(text);
     if (!r) { resultEl.style.display = 'none'; return; }
     resultEl.style.display = 'block';
- 
+
     const rc = READABILITY_COLORS[r.readability.color] || READABILITY_COLORS.amber;
     const typeMax = Math.max(...Object.values(r.typeCounts), 1);
     const distMax = Math.max(...Object.values(r.distribution).map(d => d.count), 1);
     const totalSents = r.totalSentences;
- 
+
     resultEl.innerHTML = `
       <!-- Stats grid -->
       <div class="sent-grid">
         ${[
-          ['মোট বাক্য',    r.totalSentences, ''],
-          ['মোট শব্দ',     r.totalWords, ''],
-          ['গড় দৈর্ঘ্য',   r.avgWords, 'শব্দ/বাক্য'],
-          ['মোট clause',   r.totalClauses, ''],
-          ['গড় clause',    r.avgClauses, 'প্রতি বাক্য'],
-          ['অনুচ্ছেদ',     r.paragraphs.count, ''],
-        ].map(([label, val, sub]) => `
+        ['মোট বাক্য', r.totalSentences, ''],
+        ['মোট শব্দ', r.totalWords, ''],
+        ['গড় দৈর্ঘ্য', r.avgWords, 'শব্দ/বাক্য'],
+        ['মোট clause', r.totalClauses, ''],
+        ['গড় clause', r.avgClauses, 'প্রতি বাক্য'],
+        ['অনুচ্ছেদ', r.paragraphs.count, ''],
+      ].map(([label, val, sub]) => `
           <div class="sent-stat">
             <p class="sent-stat-label">${label}</p>
             <p class="sent-stat-val">${val}</p>
@@ -1802,9 +1915,8 @@ function renderSentenceCounter(container) {
       <div style="margin-bottom:14px;">
         <p style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">পাঠযোগ্যতা</p>
         <div class="readability-badge" style="background:${rc.bg};border-color:${rc.border};color:${rc.text};">
-          <span style="font-size:18px;">${
-            {green:'🟢',teal:'🟢',amber:'🟡',orange:'🟠',red:'🔴'}[r.readability.color]
-          }</span>
+          <span style="font-size:18px;">${{ green: '🟢', teal: '🟢', amber: '🟡', orange: '🟠', red: '🔴' }[r.readability.color]
+      }</span>
           <div>
             <p style="font-weight:600;">${r.readability.label}</p>
             <p style="font-size:11.5px;opacity:.8;">${r.readability.grade} · গড় ${r.avgWords} শব্দ/বাক্য</p>
@@ -1819,7 +1931,7 @@ function renderSentenceCounter(container) {
           <div class="sent-type-row">
             <span class="sent-type-label">${type}</span>
             <div class="sent-type-bar">
-              <div class="sent-type-fill" style="width:${(count/typeMax)*100}%;background:${TYPE_COLORS[type]||'var(--accent)'};"></div>
+              <div class="sent-type-fill" style="width:${(count / typeMax) * 100}%;background:${TYPE_COLORS[type] || 'var(--accent)'};"></div>
             </div>
             <span class="sent-type-count">${count}</span>
           </div>` : '').join('')}
@@ -1832,7 +1944,7 @@ function renderSentenceCounter(container) {
           <div class="dist-row">
             <span class="dist-label">${label}</span>
             <div class="dist-bar-track">
-              <div class="dist-bar-fill" style="width:${(d.count/distMax)*100}%;"></div>
+              <div class="dist-bar-fill" style="width:${(d.count / distMax) * 100}%;"></div>
             </div>
             <span class="dist-count">${d.count}</span>
           </div>`).join('')}
@@ -1841,9 +1953,9 @@ function renderSentenceCounter(container) {
       <!-- Longest / shortest -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
         ${[
-          ['📏 সবচেয়ে দীর্ঘ বাক্য', r.longest, '#4f8ef750'],
-          ['📌 সবচেয়ে ছোট বাক্য', r.shortest, '#34d39950'],
-        ].map(([title, sent, color]) => `
+        ['📏 সবচেয়ে দীর্ঘ বাক্য', r.longest, '#4f8ef750'],
+        ['📌 সবচেয়ে ছোট বাক্য', r.shortest, '#34d39950'],
+      ].map(([title, sent, color]) => `
           <div style="background:var(--bg3);border:1px solid ${color};border-radius:var(--radius);padding:12px 14px;">
             <p style="font-size:10.5px;color:var(--text3);margin-bottom:6px;">${title} (${sent?.words || 0} শব্দ)</p>
             <p style="font-size:12.5px;color:var(--text2);line-height:1.6;font-family:var(--font-bangla);">
@@ -1858,18 +1970,18 @@ function renderSentenceCounter(container) {
       </button>
       <div id="sent-detail-list" style="display:none;margin-top:10px;max-height:320px;overflow-y:auto;"></div>
     `;
- 
+
     // Detail toggle
     const detailList = resultEl.querySelector('#sent-detail-list');
-    resultEl.querySelector('#sent-toggle-detail').addEventListener('click', function() {
+    resultEl.querySelector('#sent-toggle-detail').addEventListener('click', function () {
       showDetail = !showDetail;
       if (showDetail) {
         detailList.style.display = 'block';
         this.textContent = 'বিস্তারিত লুকাও ↑';
         detailList.innerHTML = r.sentences.map((s, i) => `
           <div class="sent-detail-row">
-            <span style="font-size:10.5px;color:var(--text3);font-family:var(--font-mono);">#${i+1}</span>
-            <span class="sent-detail-type" style="color:${TYPE_COLORS[s.sentenceType]||'var(--text3)'}">
+            <span style="font-size:10.5px;color:var(--text3);font-family:var(--font-mono);">#${i + 1}</span>
+            <span class="sent-detail-type" style="color:${TYPE_COLORS[s.sentenceType] || 'var(--text3)'}">
               ${s.sentenceType}
             </span>
             <span style="font-size:10.5px;color:var(--text3);"> · ${s.words} শব্দ</span>
@@ -1881,6 +1993,909 @@ function renderSentenceCounter(container) {
         this.textContent = `বিস্তারিত বাক্য তালিকা দেখো (${r.totalSentences}টি) ↓`;
       }
     });
+  }
+}
+
+function renderTextCleaner(container) {
+  let selectedOps = new Set(PRESETS.standard.ops);
+  let activePreset = 'standard';
+ 
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">🧹</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Text Cleaner</p>
+        <p class="tool-header-desc">Invisible chars, extra space, HTML, emoji — প্রতিটি operation আলাদাভাবে চালু/বন্ধ করো</p>
+      </div>
+    </div>
+    <div class="tool-body">
+      <div class="sample-row" id="clean-samples"></div>
+ 
+      <!-- Presets -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;" id="clean-presets"></div>
+ 
+      <!-- Ops checkboxes by category -->
+      <div id="clean-ops-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px;margin-bottom:14px;"></div>
+ 
+      <!-- IO -->
+      <div class="io-grid">
+        <div class="io-pane">
+          <span class="io-label">Input <span class="io-label-tag tag-bijoy">dirty</span></span>
+          <textarea id="clean-input" placeholder="পরিষ্কার করতে হবে এমন text এখানে paste করো…"></textarea>
+        </div>
+        <div class="io-pane">
+          <span class="io-label">Output <span class="io-label-tag tag-unicode">clean</span></span>
+          <textarea id="clean-output" readonly placeholder="পরিষ্কার text এখানে দেখাবে…"></textarea>
+        </div>
+      </div>
+ 
+      <div class="btn-row">
+        <button class="btn btn-primary" id="clean-run">🧹 Clean করো</button>
+        <button class="btn btn-ghost"   id="clean-copy">⎘ Copy</button>
+        <button class="btn btn-ghost"   id="clean-clear">✕ Clear</button>
+      </div>
+ 
+      <div id="clean-changes" style="margin-top:12px;display:none;"></div>
+    </div>
+  `;
+ 
+  // Styles
+  const style = document.createElement('style');
+  style.textContent = `
+    .clean-preset-btn { padding:6px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);
+      background:var(--surface2);color:var(--text2);font-size:12.5px;cursor:pointer;
+      font-family:var(--font-ui);transition:all var(--trans);display:flex;gap:5px;align-items:center; }
+    .clean-preset-btn.active { background:var(--accent-dim);border-color:var(--accent);color:var(--accent2);font-weight:500; }
+    .clean-preset-btn:hover:not(.active) { border-color:var(--border2);color:var(--text); }
+    .clean-op-check { display:flex;align-items:flex-start;gap:8px;padding:8px 10px;
+      border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;
+      transition:border-color var(--trans);background:var(--bg3); }
+    .clean-op-check:hover { border-color:var(--border2); }
+    .clean-op-check.checked { border-color:var(--accent);background:var(--accent-dim); }
+    .clean-op-check input { accent-color:var(--accent);margin-top:2px;flex-shrink:0; }
+    .clean-op-label { font-size:12.5px;color:var(--text);line-height:1.3; }
+    .clean-op-desc  { font-size:11px;color:var(--text3);margin-top:1px; }
+    .clean-change-row { display:flex;align-items:center;gap:8px;padding:5px 10px;
+      border-radius:var(--radius-sm);background:var(--green-dim);border:1px solid #34d39930;
+      font-size:12.5px;color:var(--text2);margin-bottom:4px; }
+    .clean-diff-badge { font-family:var(--font-mono);font-size:11px;padding:2px 8px;
+      border-radius:20px;background:var(--green-dim);color:var(--green);margin-left:auto; }
+    .cat-section-label { font-size:10.5px;font-weight:500;color:var(--text3);text-transform:uppercase;
+      letter-spacing:.06em;grid-column:1/-1;margin-top:8px;margin-bottom:2px; }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+ 
+  // Samples
+  const samplesEl = el.querySelector('#clean-samples');
+  cleanSamples.forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'sample-chip';
+    chip.textContent = s.label;
+    chip.addEventListener('click', () => { inputEl.value = s.text; doClean(); });
+    samplesEl.appendChild(chip);
+  });
+ 
+  // Preset buttons
+  const presetsEl = el.querySelector('#clean-presets');
+  Object.entries(PRESETS).forEach(([key, preset]) => {
+    const btn = document.createElement('button');
+    btn.className = 'clean-preset-btn' + (key === activePreset ? ' active' : '');
+    btn.innerHTML = `${preset.icon} ${preset.label}`;
+    btn.title = preset.desc;
+    btn.addEventListener('click', () => {
+      activePreset = key;
+      selectedOps = new Set(preset.ops);
+      presetsEl.querySelectorAll('.clean-preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderOps();
+      doClean();
+    });
+    presetsEl.appendChild(btn);
+  });
+ 
+  // Op checkboxes
+  const opsGrid = el.querySelector('#clean-ops-grid');
+  const CAT_LABELS = {
+    invisible: '👻 Invisible',
+    whitespace: '⎵ Whitespace',
+    punctuation: '✏️ Punctuation',
+    content: '📝 Content',
+    normalize: '🔧 Normalize',
+  };
+ 
+  function renderOps() {
+    opsGrid.innerHTML = '';
+    const byCategory = {};
+    Object.entries(CLEANERS).forEach(([key, cleaner]) => {
+      if (!byCategory[cleaner.category]) byCategory[cleaner.category] = [];
+      byCategory[cleaner.category].push([key, cleaner]);
+    });
+ 
+    Object.entries(byCategory).forEach(([cat, ops]) => {
+      const label = document.createElement('div');
+      label.className = 'cat-section-label';
+      label.textContent = CAT_LABELS[cat] || cat;
+      opsGrid.appendChild(label);
+ 
+      ops.forEach(([key, cleaner]) => {
+        const row = document.createElement('div');
+        const checked = selectedOps.has(key);
+        row.className = 'clean-op-check' + (checked ? ' checked' : '');
+        row.innerHTML = `
+          <input type="checkbox" id="op-${key}" ${checked ? 'checked' : ''}>
+          <div>
+            <p class="clean-op-label">${cleaner.label}</p>
+            <p class="clean-op-desc">${cleaner.desc}</p>
+          </div>
+        `;
+        row.addEventListener('click', (e) => {
+          if (e.target.tagName === 'INPUT') return;
+          const cb = row.querySelector('input');
+          cb.checked = !cb.checked;
+          cb.dispatchEvent(new Event('change'));
+        });
+        row.querySelector('input').addEventListener('change', e => {
+          if (e.target.checked) { selectedOps.add(key); row.classList.add('checked'); }
+          else { selectedOps.delete(key); row.classList.remove('checked'); }
+          activePreset = null;
+          presetsEl.querySelectorAll('.clean-preset-btn').forEach(b => b.classList.remove('active'));
+          doClean();
+        });
+        opsGrid.appendChild(row);
+      });
+    });
+  }
+ 
+  renderOps();
+ 
+  const inputEl  = el.querySelector('#clean-input');
+  const outputEl = el.querySelector('#clean-output');
+  inputEl.addEventListener('input', doClean);
+  el.querySelector('#clean-run').addEventListener('click', doClean);
+  el.querySelector('#clean-copy').addEventListener('click', () => copyText(outputEl.value));
+  el.querySelector('#clean-clear').addEventListener('click', () => {
+    inputEl.value = ''; outputEl.value = '';
+    el.querySelector('#clean-changes').style.display = 'none';
+  });
+ 
+  function doClean() {
+    const text = inputEl.value;
+    if (!text.trim()) { outputEl.value = ''; return; }
+ 
+    const { result, changes } = cleanText(text, [...selectedOps]);
+    outputEl.value = result;
+ 
+    const changesEl = el.querySelector('#clean-changes');
+    if (changes.length > 0) {
+      changesEl.style.display = 'block';
+      const stats = getDiffStats(text, result);
+      changesEl.innerHTML = `
+        <p style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
+          পরিবর্তন (${changes.length} টি operation কাজ করেছে · ${stats.charsRemoved} chars বাদ · ${stats.pctReduction}% ছোট)
+        </p>
+        ${changes.map(c => `
+          <div class="clean-change-row">
+            <span>✓</span>
+            <span>${c.label}</span>
+            <span class="clean-diff-badge">-${c.diff} chars</span>
+          </div>`).join('')}
+      `;
+    } else {
+      changesEl.style.display = changes.length > 0 ? 'block' : 'none';
+    }
+  }
+}
+ 
+ 
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Duplicate Remover
+// ═══════════════════════════════════════════════════════════════════
+ 
+function renderDuplicateRemover(container) {
+  let activeMode = 'lines';
+  let caseSensitive = false;
+  let ignoreWhitespace = true;
+  let sortMode = 'original';
+  let fuzzyThreshold = 85;
+ 
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">✂️</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Duplicate Remover</p>
+        <p class="tool-header-desc">Line, শব্দ, অনুচ্ছেদ — exact বা fuzzy matching এ duplicate সরাও</p>
+      </div>
+    </div>
+    <div class="tool-body">
+      <div class="sample-row" id="dup-samples"></div>
+ 
+      <!-- Mode selector -->
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;" id="dup-modes"></div>
+ 
+      <!-- Options -->
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px;
+        padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);">
+        <label class="dup-opt-label"><input type="checkbox" id="dup-case"> Case sensitive</label>
+        <label class="dup-opt-label"><input type="checkbox" id="dup-ws" checked> Whitespace ignore</label>
+        <div id="dup-sort-wrap" style="display:flex;gap:6px;align-items:center;margin-left:auto;">
+          <span style="font-size:12px;color:var(--text3);">Sort:</span>
+          ${['original','alpha','freq'].map(s => `
+            <button class="dup-sort-btn${s==='original'?' active':''}" data-sort="${s}">
+              ${s==='original'?'মূল ক্রম':s==='alpha'?'A-Z':'সংখ্যা'}
+            </button>`).join('')}
+        </div>
+      </div>
+ 
+      <!-- Fuzzy threshold (hidden by default) -->
+      <div id="dup-fuzzy-wrap" style="display:none;margin-bottom:14px;
+        padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);">
+        <label style="font-size:12.5px;color:var(--text2);display:flex;align-items:center;gap:10px;">
+          মিলের মাত্রা:
+          <input type="range" id="dup-threshold" min="50" max="99" value="85" style="flex:1;accent-color:var(--accent);">
+          <span id="dup-threshold-val" style="font-family:var(--font-mono);color:var(--accent2);min-width:36px;">85%</span>
+        </label>
+        <p style="font-size:11px;color:var(--text3);margin-top:4px;">এর বেশি মিল থাকলে duplicate হিসেবে গণ্য হবে</p>
+      </div>
+ 
+      <div class="io-grid">
+        <div class="io-pane">
+          <span class="io-label">Input</span>
+          <textarea id="dup-input" placeholder="এখানে text paste করো…"></textarea>
+        </div>
+        <div class="io-pane">
+          <span class="io-label">Output <span id="dup-stats-badge" class="io-label-tag tag-unicode"></span></span>
+          <textarea id="dup-output" readonly placeholder="Duplicate সরানো text এখানে দেখাবে…"></textarea>
+        </div>
+      </div>
+ 
+      <div class="btn-row">
+        <button class="btn btn-primary" id="dup-run">✂️ Remove করো</button>
+        <button class="btn btn-ghost"   id="dup-copy">⎘ Copy</button>
+        <button class="btn btn-ghost"   id="dup-clear">✕ Clear</button>
+      </div>
+ 
+      <div id="dup-result-info" style="margin-top:10px;display:none;"></div>
+    </div>
+  `;
+ 
+  const style = document.createElement('style');
+  style.textContent = `
+    .dup-mode-btn { padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);
+      background:var(--bg3);color:var(--text2);cursor:pointer;font-family:var(--font-ui);
+      font-size:13px;text-align:left;transition:all var(--trans); }
+    .dup-mode-btn.active { border-color:var(--accent);background:var(--accent-dim);color:var(--accent2); }
+    .dup-mode-btn:hover:not(.active) { border-color:var(--border2); }
+    .dup-mode-icon { font-size:16px; }
+    .dup-opt-label { display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);cursor:pointer; }
+    .dup-opt-label input { accent-color:var(--accent);width:14px;height:14px; }
+    .dup-sort-btn { padding:4px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);
+      background:transparent;color:var(--text3);font-size:11.5px;cursor:pointer;font-family:var(--font-ui);
+      transition:all var(--trans); }
+    .dup-sort-btn.active { background:var(--accent-dim);border-color:var(--accent);color:var(--accent2); }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+ 
+  // Samples
+  const samplesEl = el.querySelector('#dup-samples');
+  dupSamples.forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'sample-chip';
+    chip.textContent = s.label;
+    chip.addEventListener('click', () => { inputEl.value = s.text; doRemove(); });
+    samplesEl.appendChild(chip);
+  });
+ 
+  // Mode buttons
+  const modesEl = el.querySelector('#dup-modes');
+  Object.entries(dupModes).forEach(([key, mode]) => {
+    const btn = document.createElement('button');
+    btn.className = 'dup-mode-btn' + (key === activeMode ? ' active' : '');
+    btn.innerHTML = `<span class="dup-mode-icon">${mode.icon}</span> <strong>${mode.label}</strong><br>
+      <span style="font-size:11px;color:var(--text3);">${mode.desc}</span>`;
+    btn.addEventListener('click', () => {
+      activeMode = key;
+      modesEl.querySelectorAll('.dup-mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      el.querySelector('#dup-fuzzy-wrap').style.display = key === 'fuzzy' ? 'block' : 'none';
+      el.querySelector('#dup-sort-wrap').style.display = key === 'lines' ? 'flex' : 'none';
+      doRemove();
+    });
+    modesEl.appendChild(btn);
+  });
+ 
+  // Options
+  el.querySelector('#dup-case').addEventListener('change', e => { caseSensitive = e.target.checked; doRemove(); });
+  el.querySelector('#dup-ws').addEventListener('change', e => { ignoreWhitespace = e.target.checked; doRemove(); });
+  el.querySelector('#dup-threshold').addEventListener('input', e => {
+    fuzzyThreshold = parseInt(e.target.value);
+    el.querySelector('#dup-threshold-val').textContent = fuzzyThreshold + '%';
+    doRemove();
+  });
+  el.querySelectorAll('[data-sort]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sortMode = btn.dataset.sort;
+      el.querySelectorAll('[data-sort]').forEach(b => b.classList.toggle('active', b.dataset.sort === sortMode));
+      doRemove();
+    });
+  });
+ 
+  const inputEl  = el.querySelector('#dup-input');
+  const outputEl = el.querySelector('#dup-output');
+  inputEl.addEventListener('input', doRemove);
+  el.querySelector('#dup-run').addEventListener('click', doRemove);
+  el.querySelector('#dup-copy').addEventListener('click', () => copyText(outputEl.value));
+  el.querySelector('#dup-clear').addEventListener('click', () => {
+    inputEl.value = ''; outputEl.value = '';
+    el.querySelector('#dup-result-info').style.display = 'none';
+    el.querySelector('#dup-stats-badge').textContent = '';
+  });
+ 
+  function doRemove() {
+    const text = inputEl.value;
+    if (!text.trim()) { outputEl.value = ''; return; }
+ 
+    let result, stats;
+    if (activeMode === 'lines') {
+      ({ result, stats } = removeDuplicateLines(text, { caseSensitive, ignoreWhitespace, sortMode }));
+    } else if (activeMode === 'words') {
+      ({ result, stats } = removeDuplicateWords(text, { caseSensitive }));
+    } else if (activeMode === 'paragraphs') {
+      ({ result, stats } = removeDuplicateParagraphs(text, { caseSensitive }));
+    } else {
+      ({ result, stats } = removeFuzzyDuplicates(text, fuzzyThreshold / 100));
+    }
+ 
+    outputEl.value = result;
+    el.querySelector('#dup-stats-badge').textContent =
+      stats.removed > 0 ? `-${stats.removed} duplicate` : 'no duplicates';
+ 
+    const infoEl = el.querySelector('#dup-result-info');
+    if (stats.removed > 0) {
+      infoEl.style.display = 'block';
+      infoEl.innerHTML = `
+        <div style="display:flex;gap:16px;padding:10px 14px;background:var(--green-dim);
+          border:1px solid #34d39930;border-radius:var(--radius);font-size:13px;flex-wrap:wrap;">
+          <span>মোট: <strong>${stats.total || '—'}</strong></span>
+          <span>অনন্য: <strong>${stats.unique || (stats.total - stats.removed)}</strong></span>
+          <span style="color:var(--green);">সরানো: <strong>-${stats.removed}</strong></span>
+          ${stats.topDuplicates?.length ? `<span style="color:var(--text3);">সবচেয়ে বেশি duplicate: "${stats.topDuplicates[0].key.slice(0,30)}" (${stats.topDuplicates[0].count}x)</span>` : ''}
+        </div>
+      `;
+    } else {
+      infoEl.style.display = 'none';
+    }
+  }
+}
+ 
+ 
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Case Converter
+// ═══════════════════════════════════════════════════════════════════
+ 
+function renderCaseConverter(container) {
+  let lastInput = '';
+ 
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">📐</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Case Converter</p>
+        <p class="tool-header-desc">UPPERCASE · lowercase · Title · camelCase · snake_case · এবং আরো</p>
+      </div>
+    </div>
+    <div class="tool-body">
+      <div class="sample-row" id="case-samples"></div>
+      <textarea id="case-input" placeholder="এখানে text লিখুন বা paste করুন…" style="min-height:120px;"></textarea>
+ 
+      <div id="case-results" style="margin-top:14px;"></div>
+    </div>
+  `;
+ 
+  const style = document.createElement('style');
+  style.textContent = `
+    .case-group-label { font-size:10.5px;font-weight:500;color:var(--text3);text-transform:uppercase;
+      letter-spacing:.06em;margin:12px 0 6px; }
+    .case-result-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px; }
+    .case-result-card { background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);
+      padding:10px 14px;cursor:pointer;transition:border-color var(--trans); }
+    .case-result-card:hover { border-color:var(--accent); }
+    .case-result-card:active { border-color:var(--accent);background:var(--accent-dim); }
+    .case-result-label { font-size:10.5px;color:var(--text3);font-weight:500;text-transform:uppercase;
+      letter-spacing:.05em;margin-bottom:5px; }
+    .case-result-val { font-size:13.5px;color:var(--text);font-family:var(--font-mono);
+      word-break:break-all;line-height:1.5; }
+    .case-result-bangla { font-family:var(--font-bangla);font-size:15px; }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+ 
+  // Samples
+  const samplesEl = el.querySelector('#case-samples');
+  caseSamples.forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'sample-chip';
+    chip.textContent = s.label;
+    chip.addEventListener('click', () => { inputEl.value = s.text; doConvert(); });
+    samplesEl.appendChild(chip);
+  });
+ 
+  const inputEl  = el.querySelector('#case-input');
+  const resultsEl = el.querySelector('#case-results');
+  inputEl.addEventListener('input', doConvert);
+ 
+  function doConvert() {
+    const text = inputEl.value;
+    lastInput = text;
+    if (!text.trim()) { resultsEl.innerHTML = ''; return; }
+ 
+    const GROUP_ORDER = ['english','code','bangla','fun'];
+    const GROUP_COLORS = { english:'blue', code:'purple', bangla:'green', fun:'amber' };
+ 
+    resultsEl.innerHTML = GROUP_ORDER.map(groupKey => {
+      const group = GROUPS[groupKey];
+      const converters = Object.entries(CONVERTERS).filter(([,c]) => c.group === groupKey);
+      if (!converters.length) return '';
+ 
+      const cards = converters.map(([key, conv]) => {
+        const result = convertCase(text, key);
+        const isBangla = groupKey === 'bangla';
+        return `
+          <div class="case-result-card" onclick="navigator.clipboard.writeText(${JSON.stringify(result)}).then(()=>showToast('Copied: ${conv.label}'))">
+            <p class="case-result-label">${conv.icon} ${conv.label}</p>
+            <p class="case-result-val ${isBangla ? 'case-result-bangla' : ''}">${result || '—'}</p>
+          </div>
+        `;
+      }).join('');
+ 
+      return `
+        <p class="case-group-label">${group.label}</p>
+        <div class="case-result-grid">${cards}</div>
+      `;
+    }).join('');
+  }
+}
+
+function renderTextReverser(container) {
+  let activeMode = 'words';
+ 
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">↩️</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Text Reverser</p>
+        <p class="tool-header-desc">অক্ষর · শব্দ · লাইন · বাক্য — যেকোনো level এ উল্টো করো</p>
+      </div>
+    </div>
+    <div class="tool-body">
+      <div class="sample-row" id="rev-samples"></div>
+ 
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:8px;margin-bottom:14px;" id="rev-modes"></div>
+ 
+      <div class="io-grid">
+        <div class="io-pane">
+          <span class="io-label">Input</span>
+          <textarea id="rev-input" placeholder="এখানে text লিখুন বা paste করুন…"></textarea>
+        </div>
+        <div class="io-pane">
+          <span class="io-label">Output <span id="rev-palindrome-badge" style="display:none;" class="io-label-tag tag-avro">🔄 Palindrome!</span></span>
+          <textarea id="rev-output" readonly placeholder="উল্টো text এখানে দেখাবে…"></textarea>
+        </div>
+      </div>
+ 
+      <div class="btn-row">
+        <button class="btn btn-primary" id="rev-run">↩️ Reverse করো</button>
+        <button class="btn btn-ghost"   id="rev-copy">⎘ Copy</button>
+        <button class="btn btn-ghost"   id="rev-swap">⇄ Swap</button>
+        <button class="btn btn-ghost"   id="rev-clear">✕ Clear</button>
+        <span id="rev-stats" style="font-size:12px;color:var(--text3);margin-left:auto;font-family:var(--font-mono);"></span>
+      </div>
+    </div>
+  `;
+ 
+  const style = document.createElement('style');
+  style.textContent = `
+    .rev-mode-btn { padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);
+      background:var(--bg3);color:var(--text2);cursor:pointer;font-family:var(--font-ui);
+      font-size:12.5px;text-align:left;transition:all var(--trans);display:flex;gap:7px;align-items:flex-start; }
+    .rev-mode-btn.active { border-color:var(--accent);background:var(--accent-dim);color:var(--accent2); }
+    .rev-mode-btn:hover:not(.active) { border-color:var(--border2);color:var(--text); }
+    .rev-mode-icon { font-size:15px;flex-shrink:0;margin-top:1px; }
+    .rev-mode-text strong { display:block;font-size:13px;margin-bottom:2px; }
+    .rev-mode-text span { font-size:11px;color:var(--text3);line-height:1.4; }
+    .rev-mode-btn.active .rev-mode-text span { color:var(--accent2);opacity:.8; }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+ 
+  // Samples
+  const samplesEl = el.querySelector('#rev-samples');
+  revSamples.forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'sample-chip';
+    chip.textContent = s.label;
+    chip.addEventListener('click', () => { inputEl.value = s.text; doReverse(); });
+    samplesEl.appendChild(chip);
+  });
+ 
+  // Mode buttons
+  const modesEl = el.querySelector('#rev-modes');
+  Object.entries(reverseModes).forEach(([key, mode]) => {
+    const btn = document.createElement('button');
+    btn.className = 'rev-mode-btn' + (key === activeMode ? ' active' : '');
+    btn.innerHTML = `
+      <span class="rev-mode-icon">${mode.icon}</span>
+      <div class="rev-mode-text">
+        <strong>${mode.label}</strong>
+        <span>${mode.desc}</span>
+      </div>`;
+    btn.addEventListener('click', () => {
+      activeMode = key;
+      modesEl.querySelectorAll('.rev-mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      doReverse();
+    });
+    modesEl.appendChild(btn);
+  });
+ 
+  const inputEl  = el.querySelector('#rev-input');
+  const outputEl = el.querySelector('#rev-output');
+ 
+  inputEl.addEventListener('input', doReverse);
+  el.querySelector('#rev-run').addEventListener('click', doReverse);
+  el.querySelector('#rev-copy').addEventListener('click', () => copyText(outputEl.value));
+  el.querySelector('#rev-clear').addEventListener('click', () => {
+    inputEl.value = ''; outputEl.value = '';
+    el.querySelector('#rev-stats').textContent = '';
+    el.querySelector('#rev-palindrome-badge').style.display = 'none';
+  });
+  el.querySelector('#rev-swap').addEventListener('click', () => {
+    const tmp = inputEl.value;
+    inputEl.value = outputEl.value;
+    outputEl.value = tmp;
+    doReverse();
+  });
+ 
+  function doReverse() {
+    const text = inputEl.value;
+    if (!text.trim()) { outputEl.value = ''; return; }
+    const result = reverseText(text, activeMode);
+    outputEl.value = result;
+    const stats = revStats(text, result);
+    el.querySelector('#rev-stats').textContent =
+      `${stats.words} শব্দ · ${stats.lines} লাইন`;
+    const badge = el.querySelector('#rev-palindrome-badge');
+    badge.style.display = stats.isPalindrome ? 'inline-block' : 'none';
+  }
+}
+ 
+ 
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Line Sorter
+// ═══════════════════════════════════════════════════════════════════
+ 
+function renderLineSorter(container) {
+  let activeMode    = 'alpha';
+  let isReverse     = false;
+  let removeBlank   = false;
+  let doTrim        = false;
+  let removeDupes   = false;
+ 
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">🔀</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Line Sorter</p>
+        <p class="tool-header-desc">বর্ণানুক্রম · দৈর্ঘ্য · সংখ্যা · random — Bangla collation সহ</p>
+      </div>
+    </div>
+    <div class="tool-body">
+      <div class="sample-row" id="sort-samples"></div>
+ 
+      <!-- Sort mode grid -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:7px;margin-bottom:12px;" id="sort-modes"></div>
+ 
+      <!-- Options bar -->
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:10px 14px;
+        background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:14px;">
+        <label class="sort-opt"><input type="checkbox" id="sort-reverse"> উল্টো ক্রম (Z→A)</label>
+        <label class="sort-opt"><input type="checkbox" id="sort-blank">  Blank line সরাও</label>
+        <label class="sort-opt"><input type="checkbox" id="sort-trim">   Trim করো</label>
+        <label class="sort-opt"><input type="checkbox" id="sort-dupes">  Duplicate সরাও</label>
+      </div>
+ 
+      <div class="io-grid">
+        <div class="io-pane">
+          <span class="io-label">Input</span>
+          <textarea id="sort-input" placeholder="প্রতিটি লাইনে একটি item লিখুন বা paste করুন…" style="min-height:200px;"></textarea>
+        </div>
+        <div class="io-pane">
+          <span class="io-label">Output <span id="sort-badge" class="io-label-tag tag-unicode"></span></span>
+          <textarea id="sort-output" readonly placeholder="Sort করা লাইন এখানে দেখাবে…" style="min-height:200px;"></textarea>
+        </div>
+      </div>
+ 
+      <div class="btn-row">
+        <button class="btn btn-primary" id="sort-run">🔀 Sort করো</button>
+        <button class="btn btn-ghost"   id="sort-copy">⎘ Copy</button>
+        <button class="btn btn-ghost"   id="sort-clear">✕ Clear</button>
+        <span id="sort-stats" style="font-size:12px;color:var(--text3);margin-left:auto;font-family:var(--font-mono);"></span>
+      </div>
+    </div>
+  `;
+ 
+  const style = document.createElement('style');
+  style.textContent = `
+    .sort-mode-btn { padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);
+      background:var(--bg3);color:var(--text2);cursor:pointer;font-family:var(--font-ui);
+      font-size:12.5px;transition:all var(--trans);display:flex;flex-direction:column;gap:2px; }
+    .sort-mode-btn.active { border-color:var(--accent);background:var(--accent-dim);color:var(--accent2); }
+    .sort-mode-btn:hover:not(.active) { border-color:var(--border2);color:var(--text); }
+    .sort-mode-icon { font-size:16px;margin-bottom:2px; }
+    .sort-mode-label { font-size:12.5px;font-weight:500; }
+    .sort-mode-desc  { font-size:10.5px;color:var(--text3);line-height:1.3; }
+    .sort-mode-btn.active .sort-mode-desc { color:var(--accent2);opacity:.7; }
+    .sort-opt { display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);cursor:pointer; }
+    .sort-opt input { accent-color:var(--accent);width:14px;height:14px; }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+ 
+  // Samples
+  const samplesEl = el.querySelector('#sort-samples');
+  sortSamples.forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'sample-chip';
+    chip.textContent = s.label;
+    chip.addEventListener('click', () => { inputEl.value = s.text; doSort(); });
+    samplesEl.appendChild(chip);
+  });
+ 
+  // Sort mode buttons
+  const modesEl = el.querySelector('#sort-modes');
+  Object.entries(SORT_MODES).forEach(([key, mode]) => {
+    const btn = document.createElement('button');
+    btn.className = 'sort-mode-btn' + (key === activeMode ? ' active' : '');
+    btn.innerHTML = `
+      <span class="sort-mode-icon">${mode.icon}</span>
+      <span class="sort-mode-label">${mode.label}</span>
+      <span class="sort-mode-desc">${mode.desc}</span>`;
+    btn.addEventListener('click', () => {
+      activeMode = key;
+      modesEl.querySelectorAll('.sort-mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      doSort();
+    });
+    modesEl.appendChild(btn);
+  });
+ 
+  // Options
+  el.querySelector('#sort-reverse').addEventListener('change', e => { isReverse = e.target.checked; doSort(); });
+  el.querySelector('#sort-blank').addEventListener('change',   e => { removeBlank = e.target.checked; doSort(); });
+  el.querySelector('#sort-trim').addEventListener('change',    e => { doTrim = e.target.checked; doSort(); });
+  el.querySelector('#sort-dupes').addEventListener('change',   e => { removeDupes = e.target.checked; doSort(); });
+ 
+  const inputEl  = el.querySelector('#sort-input');
+  const outputEl = el.querySelector('#sort-output');
+ 
+  inputEl.addEventListener('input', doSort);
+  el.querySelector('#sort-run').addEventListener('click', doSort);
+  el.querySelector('#sort-copy').addEventListener('click', () => copyText(outputEl.value));
+  el.querySelector('#sort-clear').addEventListener('click', () => {
+    inputEl.value = ''; outputEl.value = '';
+    el.querySelector('#sort-stats').textContent = '';
+    el.querySelector('#sort-badge').textContent = '';
+  });
+ 
+  function doSort() {
+    const text = inputEl.value;
+    if (!text.trim()) { outputEl.value = ''; return; }
+    const { result, stats } = sortLines(text, {
+      mode: activeMode,
+      reverse: isReverse,
+      removeBlankLines: removeBlank,
+      trimLines: doTrim,
+      removeDuplicates: removeDupes,
+    });
+    outputEl.value = result;
+    el.querySelector('#sort-stats').textContent =
+      `${stats.total} → ${stats.sorted} লাইন`;
+    el.querySelector('#sort-badge').textContent =
+      stats.removed > 0 ? `-${stats.removed} সরানো` : `${stats.sorted} লাইন`;
+  }
+}
+ 
+ 
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Text Truncator
+// ═══════════════════════════════════════════════════════════════════
+ 
+function renderTextTruncator(container) {
+  let mode    = 'chars';
+  let limit   = 280;
+  let suffix  = '…';
+  let smart   = true;
+ 
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">✂️</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Text Truncator</p>
+        <p class="tool-header-desc">অক্ষর · শব্দ · বাক্য · লাইন · byte — নির্দিষ্ট limit এ কাটো</p>
+      </div>
+    </div>
+    <div class="tool-body">
+      <div class="sample-row" id="trunc-samples"></div>
+ 
+      <!-- Presets -->
+      <div style="margin-bottom:12px;">
+        <p style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px;">Quick Presets</p>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;" id="trunc-presets"></div>
+      </div>
+ 
+      <!-- Custom controls -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;
+        padding:14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);">
+        <div>
+          <p style="font-size:11px;color:var(--text3);margin-bottom:5px;">Mode</p>
+          <select id="trunc-mode" style="width:100%;padding:7px 10px;background:var(--bg2);
+            border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);
+            font-family:var(--font-ui);font-size:13px;">
+            <option value="chars">অক্ষর (Chars)</option>
+            <option value="words">শব্দ (Words)</option>
+            <option value="sentences">বাক্য (Sentences)</option>
+            <option value="lines">লাইন (Lines)</option>
+            <option value="bytes">Bytes (UTF-8)</option>
+          </select>
+        </div>
+        <div>
+          <p style="font-size:11px;color:var(--text3);margin-bottom:5px;">Limit</p>
+          <input type="number" id="trunc-limit" value="280" min="1"
+            style="width:100%;padding:7px 10px;background:var(--bg2);border:1px solid var(--border);
+            border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-mono);font-size:14px;">
+        </div>
+        <div>
+          <p style="font-size:11px;color:var(--text3);margin-bottom:5px;">Suffix</p>
+          <input type="text" id="trunc-suffix" value="…"
+            style="width:100%;padding:7px 10px;background:var(--bg2);border:1px solid var(--border);
+            border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-ui);font-size:14px;">
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text2);
+        cursor:pointer;margin-bottom:14px;">
+        <input type="checkbox" id="trunc-smart" checked style="accent-color:var(--accent);">
+        Smart truncate — শব্দের মাঝখানে কাটবে না
+      </label>
+ 
+      <!-- Input + live info bar -->
+      <div style="position:relative;">
+        <textarea id="trunc-input" placeholder="এখানে text paste করুন…" style="min-height:150px;"></textarea>
+        <div id="trunc-info-bar" style="position:absolute;bottom:8px;right:10px;
+          font-size:11px;font-family:var(--font-mono);color:var(--text3);
+          background:var(--bg2);padding:2px 8px;border-radius:var(--radius-sm);
+          border:1px solid var(--border);pointer-events:none;"></div>
+      </div>
+ 
+      <!-- Output -->
+      <div style="margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span class="io-label">Output <span id="trunc-status-badge" class="io-label-tag" style="display:none;"></span></span>
+          <span id="trunc-output-count" style="font-size:11px;color:var(--text3);font-family:var(--font-mono);"></span>
+        </div>
+        <textarea id="trunc-output" readonly placeholder="Truncated text এখানে দেখাবে…" style="min-height:120px;"></textarea>
+      </div>
+ 
+      <div class="btn-row">
+        <button class="btn btn-primary" id="trunc-run">✂️ Truncate করো</button>
+        <button class="btn btn-ghost"   id="trunc-copy">⎘ Copy</button>
+        <button class="btn btn-ghost"   id="trunc-clear">✕ Clear</button>
+      </div>
+    </div>
+  `;
+ 
+  const style = document.createElement('style');
+  style.textContent = `
+    .trunc-preset-btn { padding:5px 12px;border:1px solid var(--border);border-radius:20px;
+      background:var(--surface2);color:var(--text2);font-size:12px;cursor:pointer;
+      font-family:var(--font-ui);transition:all var(--trans);white-space:nowrap; }
+    .trunc-preset-btn:hover { border-color:var(--border2);color:var(--text); }
+    .trunc-preset-btn.active { border-color:var(--accent);background:var(--accent-dim);color:var(--accent2); }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+ 
+  // Samples
+  const samplesEl = el.querySelector('#trunc-samples');
+  truncSamples.forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'sample-chip';
+    chip.textContent = s.label;
+    chip.addEventListener('click', () => { inputEl.value = s.text; doTruncate(); });
+    samplesEl.appendChild(chip);
+  });
+ 
+  // Preset buttons
+  const presetsEl = el.querySelector('#trunc-presets');
+  Object.entries(truncPresets).forEach(([key, preset]) => {
+    const btn = document.createElement('button');
+    btn.className = 'trunc-preset-btn';
+    btn.innerHTML = `${preset.icon} ${preset.label}`;
+    btn.addEventListener('click', () => {
+      // Set controls
+      modeEl.value   = preset.mode;
+      limitEl.value  = preset.limit;
+      suffixEl.value = preset.suffix;
+      mode  = preset.mode;
+      limit = preset.limit;
+      suffix = preset.suffix;
+      presetsEl.querySelectorAll('.trunc-preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      doTruncate();
+    });
+    presetsEl.appendChild(btn);
+  });
+ 
+  const inputEl  = el.querySelector('#trunc-input');
+  const outputEl = el.querySelector('#trunc-output');
+  const modeEl   = el.querySelector('#trunc-mode');
+  const limitEl  = el.querySelector('#trunc-limit');
+  const suffixEl = el.querySelector('#trunc-suffix');
+ 
+  modeEl.addEventListener('change',   e => { mode = e.target.value; doTruncate(); });
+  limitEl.addEventListener('input',   e => { limit = parseInt(e.target.value) || 1; doTruncate(); });
+  suffixEl.addEventListener('input',  e => { suffix = e.target.value; doTruncate(); });
+  el.querySelector('#trunc-smart').addEventListener('change', e => { smart = e.target.checked; doTruncate(); });
+  inputEl.addEventListener('input', doTruncate);
+  el.querySelector('#trunc-run').addEventListener('click', doTruncate);
+  el.querySelector('#trunc-copy').addEventListener('click', () => copyText(outputEl.value));
+  el.querySelector('#trunc-clear').addEventListener('click', () => {
+    inputEl.value = ''; outputEl.value = '';
+    el.querySelector('#trunc-info-bar').textContent = '';
+    el.querySelector('#trunc-output-count').textContent = '';
+    el.querySelector('#trunc-status-badge').style.display = 'none';
+  });
+ 
+  function doTruncate() {
+    const text = inputEl.value;
+    if (!text.trim()) { outputEl.value = ''; return; }
+ 
+    // Live info bar
+    const info = getTextInfo(text);
+    el.querySelector('#trunc-info-bar').textContent =
+      `${info.graphemes}ch · ${info.words}w · ${info.sentences}s · ${info.bytes}B`;
+ 
+    const result = truncateText(text, { mode, limit, suffix, smart });
+    outputEl.value = result.result;
+ 
+    // Output count
+    const outInfo = getTextInfo(result.result);
+    el.querySelector('#trunc-output-count').textContent =
+      `${outInfo.graphemes} chars · ${outInfo.bytes} bytes`;
+ 
+    // Status badge
+    const badge = el.querySelector('#trunc-status-badge');
+    if (result.truncated) {
+      badge.style.display = 'inline-block';
+      badge.className = 'io-label-tag tag-bijoy';
+      badge.textContent = `✂️ ${result.removed || (info.graphemes - outInfo.graphemes)} ${mode} সরানো`;
+    } else {
+      badge.style.display = 'inline-block';
+      badge.className = 'io-label-tag tag-unicode';
+      badge.textContent = '✓ Limit এর মধ্যে';
+    }
   }
 }
 
