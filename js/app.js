@@ -20,6 +20,8 @@ import { convertCase, CONVERTERS, GROUPS, getStats as caseStats, SAMPLES as case
 import { reverseText, MODES as reverseModes, getStats as revStats, checkPalindrome, SAMPLES as revSamples } from './tools/text-reverser.js';
 import { sortLines, SORT_MODES, getStats as sortStats, SAMPLES as sortSamples } from './tools/line-sorter.js';
 import { truncateText, truncateWithPreset, getTextInfo, PRESETS as truncPresets, SAMPLES as truncSamples } from './tools/text-truncator.js';
+import { TEMPLATE_CATEGORIES, SAMPLES as templateSamples } from './tools/smart-templates.js';
+import { CONVERSION_TYPES, batchProcess, getStats, SAMPLES as batchSamples, CUSTOM_PRESETS } from './tools/batch-number-converter.js';
 
 // ─── Tool Definitions ───────────────────────────────────────────────────────
 const TOOLS = [
@@ -116,56 +118,72 @@ const TOOLS = [
     desc: 'বাক্য গণনা ও গভীর কাঠামো বিশ্লেষণ',
   },
   {
-   id: 'text-cleaner',
-   name: 'Text Cleaner',
-   icon: '🧹',
-   tag: 'unicode',
-   category: 'clean',
-   desc: 'Invisible chars, extra space, HTML, emoji সরাও',
-   badge: 'NEW',
- },
- {
-   id: 'duplicate-remover',
-   name: 'Duplicate Remover',
-   icon: '✂️',
-   tag: 'unicode',
-   category: 'clean',
-   desc: 'Duplicate line, শব্দ, অনুচ্ছেদ সরাও',
-   badge: 'NEW',
- },
- {
-   id: 'case-converter',
-   name: 'Case Converter',
-   icon: '📐',
-   tag: 'unicode',
-   category: 'clean',
-   desc: 'UPPER, lower, Title, camelCase, snake_case...',
-   badge: 'NEW',
- },
- {
-   id: 'text-reverser',
-   name: 'Text Reverser',
-   icon: '↩️',
-   tag: 'unicode',
-   category: 'writing',
-   desc: 'অক্ষর, শব্দ, লাইন, বাক্য উল্টো করো',
- },
- {
-   id: 'line-sorter',
-   name: 'Line Sorter',
-   icon: '🔀',
-   tag: 'unicode',
-   category: 'writing',
-   desc: 'বর্ণানুক্রম, দৈর্ঘ্য, সংখ্যা, random sort',
- },
- {
-   id: 'text-truncator',
-   name: 'Text Truncator',
-   icon: '✂️',
-   tag: 'unicode',
-   category: 'writing',
-   desc: 'অক্ষর, শব্দ, বাক্য, byte — নির্দিষ্ট limit এ কাটো',
- },
+    id: 'text-cleaner',
+    name: 'Text Cleaner',
+    icon: '🧹',
+    tag: 'unicode',
+    category: 'clean',
+    desc: 'Invisible chars, extra space, HTML, emoji সরাও',
+    badge: 'NEW',
+  },
+  {
+    id: 'duplicate-remover',
+    name: 'Duplicate Remover',
+    icon: '✂️',
+    tag: 'unicode',
+    category: 'clean',
+    desc: 'Duplicate line, শব্দ, অনুচ্ছেদ সরাও',
+    badge: 'NEW',
+  },
+  {
+    id: 'case-converter',
+    name: 'Case Converter',
+    icon: '📐',
+    tag: 'unicode',
+    category: 'clean',
+    desc: 'UPPER, lower, Title, camelCase, snake_case...',
+    badge: 'NEW',
+  },
+  {
+    id: 'text-reverser',
+    name: 'Text Reverser',
+    icon: '↩️',
+    tag: 'unicode',
+    category: 'writing',
+    desc: 'অক্ষর, শব্দ, লাইন, বাক্য উল্টো করো',
+  },
+  {
+    id: 'line-sorter',
+    name: 'Line Sorter',
+    icon: '🔀',
+    tag: 'unicode',
+    category: 'writing',
+    desc: 'বর্ণানুক্রম, দৈর্ঘ্য, সংখ্যা, random sort',
+  },
+  {
+    id: 'text-truncator',
+    name: 'Text Truncator',
+    icon: '✂️',
+    tag: 'unicode',
+    category: 'writing',
+    desc: 'অক্ষর, শব্দ, বাক্য, byte — নির্দিষ্ট limit এ কাটো',
+  },
+  {
+    id: 'smart-templates',
+    name: 'Templates',
+    icon: '📄',
+    tag: 'unicode',
+    category: 'writing',
+    desc: 'ব্যাংক, অফিস, ইমেইল, আমন্ত্রণপত্র — এক-ক্লিকে রেডি টেমপ্লেট',
+  },
+  {
+    id: 'batch-number',
+    name: 'Batch Number',
+    icon: '🔢',
+    tag: 'unicode',
+    category: 'writing',
+    desc: 'তালিকা‑ভিত্তিক সংখ্যা → বাংলা কথায়, মুদ্রা, কমা ফরম্যাট, ব্যাচ প্রসেসিং',
+  },
 
 ];
 
@@ -284,12 +302,14 @@ function renderTool(id) {
   else if (id === 'encoding-detector') renderEncodingDetector(view);
   else if (id === 'frequency-analyzer') renderFrequencyAnalyzer(view);
   else if (id === 'sentence-counter') renderSentenceCounter(view);
-  else if (id === 'text-cleaner')       renderTextCleaner(view);
-  else if (id === 'duplicate-remover')  renderDuplicateRemover(view);
-  else if (id === 'case-converter')     renderCaseConverter(view);
-  else if (id === 'text-reverser')      renderTextReverser(view);
-  else if (id === 'line-sorter')        renderLineSorter(view);
-  else if (id === 'text-truncator')     renderTextTruncator(view);
+  else if (id === 'text-cleaner') renderTextCleaner(view);
+  else if (id === 'duplicate-remover') renderDuplicateRemover(view);
+  else if (id === 'case-converter') renderCaseConverter(view);
+  else if (id === 'text-reverser') renderTextReverser(view);
+  else if (id === 'line-sorter') renderLineSorter(view);
+  else if (id === 'text-truncator') renderTextTruncator(view);
+  else if (id === 'smart-templates') renderSmartTemplates(view);
+  else if (id === 'batch-number') renderBatchNumberConverter(view);
   else view.innerHTML = `<p>Tool not found.</p>`;
 }
 
@@ -1999,7 +2019,7 @@ function renderSentenceCounter(container) {
 function renderTextCleaner(container) {
   let selectedOps = new Set(PRESETS.standard.ops);
   let activePreset = 'standard';
- 
+
   const el = document.createElement('div');
   el.className = 'tool-card';
   el.innerHTML = `
@@ -2040,7 +2060,7 @@ function renderTextCleaner(container) {
       <div id="clean-changes" style="margin-top:12px;display:none;"></div>
     </div>
   `;
- 
+
   // Styles
   const style = document.createElement('style');
   style.textContent = `
@@ -2067,7 +2087,7 @@ function renderTextCleaner(container) {
   `;
   container.appendChild(style);
   container.appendChild(el);
- 
+
   // Samples
   const samplesEl = el.querySelector('#clean-samples');
   cleanSamples.forEach(s => {
@@ -2077,7 +2097,7 @@ function renderTextCleaner(container) {
     chip.addEventListener('click', () => { inputEl.value = s.text; doClean(); });
     samplesEl.appendChild(chip);
   });
- 
+
   // Preset buttons
   const presetsEl = el.querySelector('#clean-presets');
   Object.entries(PRESETS).forEach(([key, preset]) => {
@@ -2095,7 +2115,7 @@ function renderTextCleaner(container) {
     });
     presetsEl.appendChild(btn);
   });
- 
+
   // Op checkboxes
   const opsGrid = el.querySelector('#clean-ops-grid');
   const CAT_LABELS = {
@@ -2105,7 +2125,7 @@ function renderTextCleaner(container) {
     content: '📝 Content',
     normalize: '🔧 Normalize',
   };
- 
+
   function renderOps() {
     opsGrid.innerHTML = '';
     const byCategory = {};
@@ -2113,13 +2133,13 @@ function renderTextCleaner(container) {
       if (!byCategory[cleaner.category]) byCategory[cleaner.category] = [];
       byCategory[cleaner.category].push([key, cleaner]);
     });
- 
+
     Object.entries(byCategory).forEach(([cat, ops]) => {
       const label = document.createElement('div');
       label.className = 'cat-section-label';
       label.textContent = CAT_LABELS[cat] || cat;
       opsGrid.appendChild(label);
- 
+
       ops.forEach(([key, cleaner]) => {
         const row = document.createElement('div');
         const checked = selectedOps.has(key);
@@ -2148,10 +2168,10 @@ function renderTextCleaner(container) {
       });
     });
   }
- 
+
   renderOps();
- 
-  const inputEl  = el.querySelector('#clean-input');
+
+  const inputEl = el.querySelector('#clean-input');
   const outputEl = el.querySelector('#clean-output');
   inputEl.addEventListener('input', doClean);
   el.querySelector('#clean-run').addEventListener('click', doClean);
@@ -2160,14 +2180,14 @@ function renderTextCleaner(container) {
     inputEl.value = ''; outputEl.value = '';
     el.querySelector('#clean-changes').style.display = 'none';
   });
- 
+
   function doClean() {
     const text = inputEl.value;
     if (!text.trim()) { outputEl.value = ''; return; }
- 
+
     const { result, changes } = cleanText(text, [...selectedOps]);
     outputEl.value = result;
- 
+
     const changesEl = el.querySelector('#clean-changes');
     if (changes.length > 0) {
       changesEl.style.display = 'block';
@@ -2188,19 +2208,19 @@ function renderTextCleaner(container) {
     }
   }
 }
- 
- 
+
+
 // ═══════════════════════════════════════════════════════════════════
 // RENDER: Duplicate Remover
 // ═══════════════════════════════════════════════════════════════════
- 
+
 function renderDuplicateRemover(container) {
   let activeMode = 'lines';
   let caseSensitive = false;
   let ignoreWhitespace = true;
   let sortMode = 'original';
   let fuzzyThreshold = 85;
- 
+
   const el = document.createElement('div');
   el.className = 'tool-card';
   el.innerHTML = `
@@ -2224,9 +2244,9 @@ function renderDuplicateRemover(container) {
         <label class="dup-opt-label"><input type="checkbox" id="dup-ws" checked> Whitespace ignore</label>
         <div id="dup-sort-wrap" style="display:flex;gap:6px;align-items:center;margin-left:auto;">
           <span style="font-size:12px;color:var(--text3);">Sort:</span>
-          ${['original','alpha','freq'].map(s => `
-            <button class="dup-sort-btn${s==='original'?' active':''}" data-sort="${s}">
-              ${s==='original'?'মূল ক্রম':s==='alpha'?'A-Z':'সংখ্যা'}
+          ${['original', 'alpha', 'freq'].map(s => `
+            <button class="dup-sort-btn${s === 'original' ? ' active' : ''}" data-sort="${s}">
+              ${s === 'original' ? 'মূল ক্রম' : s === 'alpha' ? 'A-Z' : 'সংখ্যা'}
             </button>`).join('')}
         </div>
       </div>
@@ -2262,7 +2282,7 @@ function renderDuplicateRemover(container) {
       <div id="dup-result-info" style="margin-top:10px;display:none;"></div>
     </div>
   `;
- 
+
   const style = document.createElement('style');
   style.textContent = `
     .dup-mode-btn { padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);
@@ -2280,7 +2300,7 @@ function renderDuplicateRemover(container) {
   `;
   container.appendChild(style);
   container.appendChild(el);
- 
+
   // Samples
   const samplesEl = el.querySelector('#dup-samples');
   dupSamples.forEach(s => {
@@ -2290,7 +2310,7 @@ function renderDuplicateRemover(container) {
     chip.addEventListener('click', () => { inputEl.value = s.text; doRemove(); });
     samplesEl.appendChild(chip);
   });
- 
+
   // Mode buttons
   const modesEl = el.querySelector('#dup-modes');
   Object.entries(dupModes).forEach(([key, mode]) => {
@@ -2308,7 +2328,7 @@ function renderDuplicateRemover(container) {
     });
     modesEl.appendChild(btn);
   });
- 
+
   // Options
   el.querySelector('#dup-case').addEventListener('change', e => { caseSensitive = e.target.checked; doRemove(); });
   el.querySelector('#dup-ws').addEventListener('change', e => { ignoreWhitespace = e.target.checked; doRemove(); });
@@ -2324,8 +2344,8 @@ function renderDuplicateRemover(container) {
       doRemove();
     });
   });
- 
-  const inputEl  = el.querySelector('#dup-input');
+
+  const inputEl = el.querySelector('#dup-input');
   const outputEl = el.querySelector('#dup-output');
   inputEl.addEventListener('input', doRemove);
   el.querySelector('#dup-run').addEventListener('click', doRemove);
@@ -2335,11 +2355,11 @@ function renderDuplicateRemover(container) {
     el.querySelector('#dup-result-info').style.display = 'none';
     el.querySelector('#dup-stats-badge').textContent = '';
   });
- 
+
   function doRemove() {
     const text = inputEl.value;
     if (!text.trim()) { outputEl.value = ''; return; }
- 
+
     let result, stats;
     if (activeMode === 'lines') {
       ({ result, stats } = removeDuplicateLines(text, { caseSensitive, ignoreWhitespace, sortMode }));
@@ -2350,11 +2370,11 @@ function renderDuplicateRemover(container) {
     } else {
       ({ result, stats } = removeFuzzyDuplicates(text, fuzzyThreshold / 100));
     }
- 
+
     outputEl.value = result;
     el.querySelector('#dup-stats-badge').textContent =
       stats.removed > 0 ? `-${stats.removed} duplicate` : 'no duplicates';
- 
+
     const infoEl = el.querySelector('#dup-result-info');
     if (stats.removed > 0) {
       infoEl.style.display = 'block';
@@ -2364,7 +2384,7 @@ function renderDuplicateRemover(container) {
           <span>মোট: <strong>${stats.total || '—'}</strong></span>
           <span>অনন্য: <strong>${stats.unique || (stats.total - stats.removed)}</strong></span>
           <span style="color:var(--green);">সরানো: <strong>-${stats.removed}</strong></span>
-          ${stats.topDuplicates?.length ? `<span style="color:var(--text3);">সবচেয়ে বেশি duplicate: "${stats.topDuplicates[0].key.slice(0,30)}" (${stats.topDuplicates[0].count}x)</span>` : ''}
+          ${stats.topDuplicates?.length ? `<span style="color:var(--text3);">সবচেয়ে বেশি duplicate: "${stats.topDuplicates[0].key.slice(0, 30)}" (${stats.topDuplicates[0].count}x)</span>` : ''}
         </div>
       `;
     } else {
@@ -2372,15 +2392,15 @@ function renderDuplicateRemover(container) {
     }
   }
 }
- 
- 
+
+
 // ═══════════════════════════════════════════════════════════════════
 // RENDER: Case Converter
 // ═══════════════════════════════════════════════════════════════════
- 
+
 function renderCaseConverter(container) {
   let lastInput = '';
- 
+
   const el = document.createElement('div');
   el.className = 'tool-card';
   el.innerHTML = `
@@ -2398,7 +2418,7 @@ function renderCaseConverter(container) {
       <div id="case-results" style="margin-top:14px;"></div>
     </div>
   `;
- 
+
   const style = document.createElement('style');
   style.textContent = `
     .case-group-label { font-size:10.5px;font-weight:500;color:var(--text3);text-transform:uppercase;
@@ -2416,7 +2436,7 @@ function renderCaseConverter(container) {
   `;
   container.appendChild(style);
   container.appendChild(el);
- 
+
   // Samples
   const samplesEl = el.querySelector('#case-samples');
   caseSamples.forEach(s => {
@@ -2426,24 +2446,24 @@ function renderCaseConverter(container) {
     chip.addEventListener('click', () => { inputEl.value = s.text; doConvert(); });
     samplesEl.appendChild(chip);
   });
- 
-  const inputEl  = el.querySelector('#case-input');
+
+  const inputEl = el.querySelector('#case-input');
   const resultsEl = el.querySelector('#case-results');
   inputEl.addEventListener('input', doConvert);
- 
+
   function doConvert() {
     const text = inputEl.value;
     lastInput = text;
     if (!text.trim()) { resultsEl.innerHTML = ''; return; }
- 
-    const GROUP_ORDER = ['english','code','bangla','fun'];
-    const GROUP_COLORS = { english:'blue', code:'purple', bangla:'green', fun:'amber' };
- 
+
+    const GROUP_ORDER = ['english', 'code', 'bangla', 'fun'];
+    const GROUP_COLORS = { english: 'blue', code: 'purple', bangla: 'green', fun: 'amber' };
+
     resultsEl.innerHTML = GROUP_ORDER.map(groupKey => {
       const group = GROUPS[groupKey];
-      const converters = Object.entries(CONVERTERS).filter(([,c]) => c.group === groupKey);
+      const converters = Object.entries(CONVERTERS).filter(([, c]) => c.group === groupKey);
       if (!converters.length) return '';
- 
+
       const cards = converters.map(([key, conv]) => {
         const result = convertCase(text, key);
         const isBangla = groupKey === 'bangla';
@@ -2454,7 +2474,7 @@ function renderCaseConverter(container) {
           </div>
         `;
       }).join('');
- 
+
       return `
         <p class="case-group-label">${group.label}</p>
         <div class="case-result-grid">${cards}</div>
@@ -2465,7 +2485,7 @@ function renderCaseConverter(container) {
 
 function renderTextReverser(container) {
   let activeMode = 'words';
- 
+
   const el = document.createElement('div');
   el.className = 'tool-card';
   el.innerHTML = `
@@ -2501,7 +2521,7 @@ function renderTextReverser(container) {
       </div>
     </div>
   `;
- 
+
   const style = document.createElement('style');
   style.textContent = `
     .rev-mode-btn { padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);
@@ -2516,7 +2536,7 @@ function renderTextReverser(container) {
   `;
   container.appendChild(style);
   container.appendChild(el);
- 
+
   // Samples
   const samplesEl = el.querySelector('#rev-samples');
   revSamples.forEach(s => {
@@ -2526,7 +2546,7 @@ function renderTextReverser(container) {
     chip.addEventListener('click', () => { inputEl.value = s.text; doReverse(); });
     samplesEl.appendChild(chip);
   });
- 
+
   // Mode buttons
   const modesEl = el.querySelector('#rev-modes');
   Object.entries(reverseModes).forEach(([key, mode]) => {
@@ -2546,10 +2566,10 @@ function renderTextReverser(container) {
     });
     modesEl.appendChild(btn);
   });
- 
-  const inputEl  = el.querySelector('#rev-input');
+
+  const inputEl = el.querySelector('#rev-input');
   const outputEl = el.querySelector('#rev-output');
- 
+
   inputEl.addEventListener('input', doReverse);
   el.querySelector('#rev-run').addEventListener('click', doReverse);
   el.querySelector('#rev-copy').addEventListener('click', () => copyText(outputEl.value));
@@ -2564,7 +2584,7 @@ function renderTextReverser(container) {
     outputEl.value = tmp;
     doReverse();
   });
- 
+
   function doReverse() {
     const text = inputEl.value;
     if (!text.trim()) { outputEl.value = ''; return; }
@@ -2577,19 +2597,19 @@ function renderTextReverser(container) {
     badge.style.display = stats.isPalindrome ? 'inline-block' : 'none';
   }
 }
- 
- 
+
+
 // ═══════════════════════════════════════════════════════════════════
 // RENDER: Line Sorter
 // ═══════════════════════════════════════════════════════════════════
- 
+
 function renderLineSorter(container) {
-  let activeMode    = 'alpha';
-  let isReverse     = false;
-  let removeBlank   = false;
-  let doTrim        = false;
-  let removeDupes   = false;
- 
+  let activeMode = 'alpha';
+  let isReverse = false;
+  let removeBlank = false;
+  let doTrim = false;
+  let removeDupes = false;
+
   const el = document.createElement('div');
   el.className = 'tool-card';
   el.innerHTML = `
@@ -2634,7 +2654,7 @@ function renderLineSorter(container) {
       </div>
     </div>
   `;
- 
+
   const style = document.createElement('style');
   style.textContent = `
     .sort-mode-btn { padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);
@@ -2651,7 +2671,7 @@ function renderLineSorter(container) {
   `;
   container.appendChild(style);
   container.appendChild(el);
- 
+
   // Samples
   const samplesEl = el.querySelector('#sort-samples');
   sortSamples.forEach(s => {
@@ -2661,7 +2681,7 @@ function renderLineSorter(container) {
     chip.addEventListener('click', () => { inputEl.value = s.text; doSort(); });
     samplesEl.appendChild(chip);
   });
- 
+
   // Sort mode buttons
   const modesEl = el.querySelector('#sort-modes');
   Object.entries(SORT_MODES).forEach(([key, mode]) => {
@@ -2679,16 +2699,16 @@ function renderLineSorter(container) {
     });
     modesEl.appendChild(btn);
   });
- 
+
   // Options
   el.querySelector('#sort-reverse').addEventListener('change', e => { isReverse = e.target.checked; doSort(); });
-  el.querySelector('#sort-blank').addEventListener('change',   e => { removeBlank = e.target.checked; doSort(); });
-  el.querySelector('#sort-trim').addEventListener('change',    e => { doTrim = e.target.checked; doSort(); });
-  el.querySelector('#sort-dupes').addEventListener('change',   e => { removeDupes = e.target.checked; doSort(); });
- 
-  const inputEl  = el.querySelector('#sort-input');
+  el.querySelector('#sort-blank').addEventListener('change', e => { removeBlank = e.target.checked; doSort(); });
+  el.querySelector('#sort-trim').addEventListener('change', e => { doTrim = e.target.checked; doSort(); });
+  el.querySelector('#sort-dupes').addEventListener('change', e => { removeDupes = e.target.checked; doSort(); });
+
+  const inputEl = el.querySelector('#sort-input');
   const outputEl = el.querySelector('#sort-output');
- 
+
   inputEl.addEventListener('input', doSort);
   el.querySelector('#sort-run').addEventListener('click', doSort);
   el.querySelector('#sort-copy').addEventListener('click', () => copyText(outputEl.value));
@@ -2697,7 +2717,7 @@ function renderLineSorter(container) {
     el.querySelector('#sort-stats').textContent = '';
     el.querySelector('#sort-badge').textContent = '';
   });
- 
+
   function doSort() {
     const text = inputEl.value;
     if (!text.trim()) { outputEl.value = ''; return; }
@@ -2715,18 +2735,18 @@ function renderLineSorter(container) {
       stats.removed > 0 ? `-${stats.removed} সরানো` : `${stats.sorted} লাইন`;
   }
 }
- 
- 
+
+
 // ═══════════════════════════════════════════════════════════════════
 // RENDER: Text Truncator
 // ═══════════════════════════════════════════════════════════════════
- 
+
 function renderTextTruncator(container) {
-  let mode    = 'chars';
-  let limit   = 280;
-  let suffix  = '…';
-  let smart   = true;
- 
+  let mode = 'chars';
+  let limit = 280;
+  let suffix = '…';
+  let smart = true;
+
   const el = document.createElement('div');
   el.className = 'tool-card';
   el.innerHTML = `
@@ -2805,7 +2825,7 @@ function renderTextTruncator(container) {
       </div>
     </div>
   `;
- 
+
   const style = document.createElement('style');
   style.textContent = `
     .trunc-preset-btn { padding:5px 12px;border:1px solid var(--border);border-radius:20px;
@@ -2816,7 +2836,7 @@ function renderTextTruncator(container) {
   `;
   container.appendChild(style);
   container.appendChild(el);
- 
+
   // Samples
   const samplesEl = el.querySelector('#trunc-samples');
   truncSamples.forEach(s => {
@@ -2826,7 +2846,7 @@ function renderTextTruncator(container) {
     chip.addEventListener('click', () => { inputEl.value = s.text; doTruncate(); });
     samplesEl.appendChild(chip);
   });
- 
+
   // Preset buttons
   const presetsEl = el.querySelector('#trunc-presets');
   Object.entries(truncPresets).forEach(([key, preset]) => {
@@ -2835,10 +2855,10 @@ function renderTextTruncator(container) {
     btn.innerHTML = `${preset.icon} ${preset.label}`;
     btn.addEventListener('click', () => {
       // Set controls
-      modeEl.value   = preset.mode;
-      limitEl.value  = preset.limit;
+      modeEl.value = preset.mode;
+      limitEl.value = preset.limit;
       suffixEl.value = preset.suffix;
-      mode  = preset.mode;
+      mode = preset.mode;
       limit = preset.limit;
       suffix = preset.suffix;
       presetsEl.querySelectorAll('.trunc-preset-btn').forEach(b => b.classList.remove('active'));
@@ -2847,16 +2867,16 @@ function renderTextTruncator(container) {
     });
     presetsEl.appendChild(btn);
   });
- 
-  const inputEl  = el.querySelector('#trunc-input');
+
+  const inputEl = el.querySelector('#trunc-input');
   const outputEl = el.querySelector('#trunc-output');
-  const modeEl   = el.querySelector('#trunc-mode');
-  const limitEl  = el.querySelector('#trunc-limit');
+  const modeEl = el.querySelector('#trunc-mode');
+  const limitEl = el.querySelector('#trunc-limit');
   const suffixEl = el.querySelector('#trunc-suffix');
- 
-  modeEl.addEventListener('change',   e => { mode = e.target.value; doTruncate(); });
-  limitEl.addEventListener('input',   e => { limit = parseInt(e.target.value) || 1; doTruncate(); });
-  suffixEl.addEventListener('input',  e => { suffix = e.target.value; doTruncate(); });
+
+  modeEl.addEventListener('change', e => { mode = e.target.value; doTruncate(); });
+  limitEl.addEventListener('input', e => { limit = parseInt(e.target.value) || 1; doTruncate(); });
+  suffixEl.addEventListener('input', e => { suffix = e.target.value; doTruncate(); });
   el.querySelector('#trunc-smart').addEventListener('change', e => { smart = e.target.checked; doTruncate(); });
   inputEl.addEventListener('input', doTruncate);
   el.querySelector('#trunc-run').addEventListener('click', doTruncate);
@@ -2867,24 +2887,24 @@ function renderTextTruncator(container) {
     el.querySelector('#trunc-output-count').textContent = '';
     el.querySelector('#trunc-status-badge').style.display = 'none';
   });
- 
+
   function doTruncate() {
     const text = inputEl.value;
     if (!text.trim()) { outputEl.value = ''; return; }
- 
+
     // Live info bar
     const info = getTextInfo(text);
     el.querySelector('#trunc-info-bar').textContent =
       `${info.graphemes}ch · ${info.words}w · ${info.sentences}s · ${info.bytes}B`;
- 
+
     const result = truncateText(text, { mode, limit, suffix, smart });
     outputEl.value = result.result;
- 
+
     // Output count
     const outInfo = getTextInfo(result.result);
     el.querySelector('#trunc-output-count').textContent =
       `${outInfo.graphemes} chars · ${outInfo.bytes} bytes`;
- 
+
     // Status badge
     const badge = el.querySelector('#trunc-status-badge');
     if (result.truncated) {
@@ -2897,6 +2917,480 @@ function renderTextTruncator(container) {
       badge.textContent = '✓ Limit এর মধ্যে';
     }
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Smart Templates & Snippets
+// ═══════════════════════════════════════════════════════════════════
+
+function renderSmartTemplates(container) {
+  let currentCategory = 'bank';
+  let currentTemplate = null;
+  let currentPlaceholders = [];
+
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">📄</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Smart Templates & Snippets</p>
+        <p class="tool-header-desc">এক-ক্লিকে বাংলা স্ট্যান্ডার্ড ফরম্যাট — ইমেইল, ব্যাংক চিঠি, নোটিশ, আমন্ত্রণপত্র</p>
+      </div>
+    </div>
+    <div class="tool-body">
+      <!-- Categories row -->
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;" id="st-categories"></div>
+
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        <div style="flex: 1.5; min-width:200px;">
+          <p style="font-size:12px; font-weight:500; margin-bottom:6px;">টেমপ্লেট তালিকা</p>
+          <div id="st-template-list" style="background:var(--bg3); border-radius:var(--radius); border:1px solid var(--border); max-height:300px; overflow-y:auto; padding:6px;"></div>
+        </div>
+        <div style="flex: 3; min-width:280px;">
+          <p style="font-size:12px; font-weight:500; margin-bottom:6px;">প্রিভিউ ও প্লেসহোল্ডার</p>
+          <div id="st-preview-area" style="background:var(--bg3); border-radius:var(--radius); border:1px solid var(--border); padding:12px; max-height:300px; overflow-y:auto; white-space:pre-wrap; font-family:var(--font-bangla); font-size:14px;"></div>
+        </div>
+      </div>
+
+      <div id="st-form-area" style="margin-top:16px; background:var(--bg2); border-radius:var(--radius); padding:12px;"></div>
+
+      <div class="btn-row" style="margin-top:16px;">
+        <button class="btn btn-primary" id="st-insert">📋 ইনসার্ট করুন (অ্যাক্টিভ এডিটরে)</button>
+        <button class="btn btn-ghost" id="st-copy">⎘ কপি টু ক্লিপবোর্ড</button>
+        <button class="btn btn-ghost" id="st-clear">✕ পরিষ্কার</button>
+      </div>
+    </div>
+  `;
+
+  // Style inline for the template list items
+  const style = document.createElement('style');
+  style.textContent = `
+    .st-template-item { padding:8px; cursor:pointer; border-bottom:1px solid var(--border); transition:background var(--trans); }
+    .st-template-item:hover { background:var(--surface2); border-radius:var(--radius-sm); }
+    .st-template-item.active { background:var(--accent-dim); color:var(--accent2); border-left:3px solid var(--accent); }
+    .st-cat-btn { padding:4px 12px; border:1px solid var(--border); border-radius:20px; background:transparent; color:var(--text2); cursor:pointer; font-size:12px; transition:all var(--trans); }
+    .st-cat-btn.active { background:var(--accent); border-color:var(--accent); color:white; }
+    .st-cat-btn:hover:not(.active) { border-color:var(--border2); color:var(--text); }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+
+  // Helper: Toast (if global copyText doesn't exist, define here)
+  let toastEl = null;
+  function showToast(msg, isError = false) {
+    if (!toastEl) {
+      toastEl = document.createElement('div');
+      toastEl.className = 'st-toast';
+      toastEl.style.cssText = `
+        position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+        background: #2e7d32; color: white; padding: 8px 16px; border-radius: 40px;
+        font-size: 13px; z-index: 10000; opacity: 0; transition: opacity 0.2s;
+        pointer-events: none; font-family: var(--font-ui);
+      `;
+      document.body.appendChild(toastEl);
+    }
+    toastEl.textContent = msg;
+    toastEl.style.background = isError ? '#d32f2f' : '#2e7d32';
+    toastEl.style.opacity = '1';
+    setTimeout(() => { toastEl.style.opacity = '0'; }, 2000);
+  }
+
+  // Use global copyText if exists, else this fallback
+  const copyToClipboard = (typeof copyText === 'function') ? copyText : (text) => {
+    navigator.clipboard.writeText(text).then(() => showToast('কপি হয়েছে!')).catch(() => showToast('ব্যর্থ', true));
+  };
+
+  // Render categories
+  const categoriesDiv = el.querySelector('#st-categories');
+  Object.entries(TEMPLATE_CATEGORIES).forEach(([key, cat]) => {
+    const btn = document.createElement('button');
+    btn.textContent = `${cat.icon} ${cat.name}`;
+    btn.className = 'st-cat-btn' + (key === currentCategory ? ' active' : '');
+    btn.addEventListener('click', () => {
+      currentCategory = key;
+      document.querySelectorAll('#st-categories .st-cat-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadTemplatesForCategory(key);
+    });
+    categoriesDiv.appendChild(btn);
+  });
+
+  function loadTemplatesForCategory(catKey) {
+    const cat = TEMPLATE_CATEGORIES[catKey];
+    if (!cat) return;
+    const listDiv = el.querySelector('#st-template-list');
+    listDiv.innerHTML = '';
+    cat.templates.forEach(tpl => {
+      const item = document.createElement('div');
+      item.className = 'st-template-item';
+      item.textContent = tpl.name;
+      item.dataset.id = tpl.id;
+      item.addEventListener('click', () => {
+        document.querySelectorAll('#st-template-list .st-template-item').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+        selectTemplate(tpl);
+      });
+      listDiv.appendChild(item);
+    });
+    // Optionally auto-select first template
+    if (cat.templates.length) {
+      const first = cat.templates[0];
+      selectTemplate(first);
+      const firstItem = listDiv.querySelector('.st-template-item');
+      if (firstItem) firstItem.classList.add('active');
+    } else {
+      el.querySelector('#st-preview-area').innerHTML = '<p style="color:var(--text3);">এই ক্যাটাগরিতে কোনো টেমপ্লেট নেই।</p>';
+      el.querySelector('#st-form-area').innerHTML = '';
+      currentTemplate = null;
+    }
+  }
+
+  function selectTemplate(tpl) {
+    currentTemplate = tpl;
+    currentPlaceholders = (tpl.placeholders || []).map(p => ({ key: p, value: '' }));
+    // Show raw preview
+    let previewHtml = `<div style="white-space:pre-wrap;">${escapeHtml(tpl.content)}</div>`;
+    el.querySelector('#st-preview-area').innerHTML = previewHtml;
+
+    // Build form
+    const formDiv = el.querySelector('#st-form-area');
+    if (currentPlaceholders.length) {
+      formDiv.innerHTML = `<p style="margin-bottom:8px; font-size:12px;">🔧 নিচের তথ্য পূরণ করুন (Bangla/English):</p>`;
+      currentPlaceholders.forEach((ph, idx) => {
+        const inputId = `st_ph_${idx}`;
+        const row = document.createElement('div');
+        row.style.marginBottom = '10px';
+        row.innerHTML = `
+          <label style="display:block; font-size:12px; margin-bottom:4px;">${ph.key}</label>
+          <input type="text" id="${inputId}" placeholder="যেমন: মোহাম্মদ আলী" style="width:100%; padding:6px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm);">
+        `;
+        formDiv.appendChild(row);
+        const inputEl = row.querySelector(`#${inputId}`);
+        inputEl.addEventListener('input', (e) => {
+          currentPlaceholders[idx].value = e.target.value;
+          updatePreview();
+        });
+      });
+    } else {
+      formDiv.innerHTML = '<p style="color:var(--text3);">এই টেমপ্লেটে কোনো প্লেসহোল্ডার নেই।</p>';
+    }
+    updatePreview();
+  }
+
+  function updatePreview() {
+    if (!currentTemplate) return;
+    let filled = currentTemplate.content;
+    currentPlaceholders.forEach(ph => {
+      const regex = new RegExp(`\\[${escapeRegex(ph.key)}\\]`, 'g');
+      filled = filled.replace(regex, ph.value || `[${ph.key}]`);
+    });
+    el.querySelector('#st-preview-area').innerHTML = `<div style="white-space:pre-wrap;">${escapeHtml(filled)}</div>`;
+    currentTemplate.filledText = filled;
+  }
+
+  function getFinalText() {
+    if (!currentTemplate) return '';
+    let filled = currentTemplate.content;
+    currentPlaceholders.forEach(ph => {
+      const regex = new RegExp(`\\[${escapeRegex(ph.key)}\\]`, 'g');
+      filled = filled.replace(regex, ph.value || `[${ph.key}]`);
+    });
+    return filled;
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/[&<>]/g, function (m) {
+      if (m === '&') return '&amp;';
+      if (m === '<') return '&lt;';
+      if (m === '>') return '&gt;';
+      return m;
+    });
+  }
+  function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // Buttons
+  el.querySelector('#st-insert').addEventListener('click', () => {
+    const final = getFinalText();
+    if (!final) return showToast('কোনো টেমপ্লেট নির্বাচন করুন', true);
+    let activeEditor = document.querySelector('textarea:focus');
+    if (!activeEditor) activeEditor = document.querySelector('textarea');
+    if (activeEditor) {
+      const start = activeEditor.selectionStart;
+      const end = activeEditor.selectionEnd;
+      const newText = activeEditor.value.substring(0, start) + final + activeEditor.value.substring(end);
+      activeEditor.value = newText;
+      activeEditor.dispatchEvent(new Event('input', { bubbles: true }));
+      showToast('টেমপ্লেটটি এডিটরে যুক্ত হয়েছে');
+    } else {
+      showToast('কোনো টেক্সট এলিমেন্ট সক্রিয় নেই', true);
+    }
+  });
+
+  el.querySelector('#st-copy').addEventListener('click', () => {
+    const final = getFinalText();
+    copyToClipboard(final);
+  });
+
+  el.querySelector('#st-clear').addEventListener('click', () => {
+    currentTemplate = null;
+    currentPlaceholders = [];
+    el.querySelector('#st-template-list').innerHTML = '';
+    el.querySelector('#st-preview-area').innerHTML = '<p style="color:var(--text3);">বাম থেকে একটি টেমপ্লেট নির্বাচন করুন</p>';
+    el.querySelector('#st-form-area').innerHTML = '';
+  });
+
+  // Load initial category
+  loadTemplatesForCategory(currentCategory);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Batch Number & Currency Converter
+// ═══════════════════════════════════════════════════════════════════
+
+function renderBatchNumberConverter(container) {
+  let activeConversion = 'words_bn';
+  let customOptions = {
+    prefix: '',
+    suffix: '',
+    decimals: 0,
+    thousands: 'bd',
+    currencySymbol: ''
+  };
+
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">🔢</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Batch Number & Currency Converter</p>
+        <p class="tool-header-desc">তালিকা‑ভিত্তিক সংখ্যা → বাংলা কথায়, মুদ্রা, কমা ফরম্যাট, কাস্টম — একসাথে অনেকগুলি লাইন প্রসেস করুন</p>
+      </div>
+    </div>
+    <div class="tool-body">
+      <div class="sample-row" id="batch-samples"></div>
+
+      <!-- Conversion type grid -->
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:8px; margin-bottom:16px;" id="batch-types"></div>
+
+      <!-- Custom format options (hidden unless custom mode selected) -->
+      <div id="batch-custom-panel" style="display:none; margin-bottom:16px; padding:12px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius);">
+        <p style="font-size:12px; font-weight:500; margin-bottom:8px;">⚙️ কাস্টম ফরম্যাট বিকল্প</p>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="custom-prefix-enable"> Prefix</label>
+          <input type="text" id="custom-prefix" placeholder="যেমন: মোট টাকা " style="width:120px; padding:5px;" disabled>
+          <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="custom-suffix-enable"> Suffix</label>
+          <input type="text" id="custom-suffix" placeholder="যেমন: টাকা মাত্র" style="width:120px; padding:5px;" disabled>
+          <label>দশমিক স্থান:</label>
+          <input type="number" id="custom-decimals" value="0" min="0" max="4" style="width:70px;">
+          <label>কমা স্টাইল:</label>
+          <select id="custom-thousands" style="padding:5px;">
+            <option value="none">কমা নেই</option>
+            <option value="bd" selected>বাংলাদেশি (১,২৩,৪৫,৬৭৮)</option>
+            <option value="intl">আন্তর্জাতিক (১২৩,৪৫৬,৭৮৯)</option>
+          </select>
+          <label>মুদ্রা প্রতীক:</label>
+          <select id="custom-currency">
+            <option value="">কোনোটি নয়</option>
+            <option value="৳">৳ (টাকা)</option>
+            <option value="$">$ (ডলার)</option>
+            <option value="€">€ (ইউরো)</option>
+          </select>
+        </div>
+        <div style="margin-top:10px;">
+          <p style="font-size:11px; color:var(--text3);">Presets:</p>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;" id="custom-presets"></div>
+        </div>
+      </div>
+
+      <div class="io-grid">
+        <div class="io-pane">
+          <span class="io-label">Input</span>
+          <textarea id="batch-input" placeholder="প্রতি লাইনে একটি সংখ্যা লিখুন…&#10;উদাহরণ:&#10;1200&#10;2500.50&#10;৩৭৫০" style="min-height:200px;"></textarea>
+        </div>
+        <div class="io-pane">
+          <span class="io-label">Output</span>
+          <textarea id="batch-output" readonly placeholder="রূপান্তরিত ফলাফল এখানে দেখাবে…" style="min-height:200px;"></textarea>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="batch-run">⟳ কনভার্ট করুন</button>
+        <button class="btn btn-ghost" id="batch-copy">⎘ কপি আউটপুট</button>
+        <button class="btn btn-ghost" id="batch-clear">✕ পরিষ্কার</button>
+        <button class="btn btn-ghost" id="batch-swap">⇄ ইনপুট ↔ আউটপুট</button>
+        <span id="batch-stats" style="font-size:12px; color:var(--text3); margin-left:auto; font-family:var(--font-mono);"></span>
+      </div>
+    </div>
+  `;
+
+  const style = document.createElement('style');
+  style.textContent = `
+    .batch-type-btn { padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius-sm);
+      background:var(--bg3); color:var(--text2); cursor:pointer; font-family:var(--font-ui);
+      font-size:12px; transition:all var(--trans); display:flex; align-items:center; gap:8px; }
+    .batch-type-btn.active { border-color:var(--accent); background:var(--accent-dim); color:var(--accent2); }
+    .batch-type-btn:hover:not(.active) { border-color:var(--border2); color:var(--text); }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+
+  // Toast helper
+  let toastEl = null;
+  function showToast(msg, isError = false) {
+    if (!toastEl) {
+      toastEl = document.createElement('div');
+      toastEl.className = 'batch-toast';
+      toastEl.style.cssText = `
+        position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+        background: #2e7d32; color: white; padding: 8px 16px; border-radius: 40px;
+        font-size: 13px; z-index: 10000; opacity: 0; transition: opacity 0.2s;
+        pointer-events: none; font-family: var(--font-ui);
+      `;
+      document.body.appendChild(toastEl);
+    }
+    toastEl.textContent = msg;
+    toastEl.style.background = isError ? '#d32f2f' : '#2e7d32';
+    toastEl.style.opacity = '1';
+    setTimeout(() => { toastEl.style.opacity = '0'; }, 2000);
+  }
+
+  function copyText(text) {
+    if (!text) { showToast('কপি করার কিছু নেই', true); return; }
+    navigator.clipboard.writeText(text).then(() => showToast('কপি হয়েছে!')).catch(() => showToast('ব্যর্থ', true));
+  }
+
+  // Samples
+  // DOM ELEMENTS & doProcess MUST be defined BEFORE samples/buttons use them
+  const inputEl = el.querySelector('#batch-input');
+  const outputEl = el.querySelector('#batch-output');
+  const statsSpan = el.querySelector('#batch-stats');
+
+  function doProcess() {
+    const inputText = inputEl.value;
+    if (!inputText.trim()) {
+      outputEl.value = '';
+      statsSpan.textContent = '';
+      return;
+    }
+    const options = {
+      conversionType: activeConversion,
+      customOptions: activeConversion === 'custom' ? customOptions : {}
+    };
+    const result = batchProcess(inputText, options);
+    outputEl.value = result;
+    setBatchStats(inputText, result);
+  }
+
+  function setBatchStats(originalText, processedText) {
+    if (!originalText.trim() && !processedText.trim()) {
+      statsSpan.textContent = '';
+      return;
+    }
+    const stats = getStats(originalText, processedText);
+    statsSpan.textContent = `${stats.inputLines} লাইন প্রসেস → ${stats.outputLines} আউটপুট`;
+  }
+
+
+  const samplesEl = el.querySelector('#batch-samples');
+  batchSamples.forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'sample-chip';
+    chip.textContent = s.label;
+    chip.addEventListener('click', () => { inputEl.value = s.text; doProcess(); });
+    samplesEl.appendChild(chip);
+  });
+
+  // Render conversion type buttons
+  const typesContainer = el.querySelector('#batch-types');
+  Object.values(CONVERSION_TYPES).forEach(type => {
+    const btn = document.createElement('button');
+    btn.className = 'batch-type-btn' + (type.id === activeConversion ? ' active' : '');
+    btn.innerHTML = `<span>${type.icon}</span> <span>${type.label}</span>`;
+    btn.dataset.type = type.id;
+    btn.addEventListener('click', () => {
+      activeConversion = type.id;
+      document.querySelectorAll('#batch-types .batch-type-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const customPanel = el.querySelector('#batch-custom-panel');
+      if (activeConversion === 'custom') {
+        customPanel.style.display = 'block';
+      } else {
+        customPanel.style.display = 'none';
+      }
+      doProcess();
+    });
+    typesContainer.appendChild(btn);
+  });
+
+  // Custom panel elements
+  const customPanel = el.querySelector('#batch-custom-panel');
+  const customPrefixEnable = el.querySelector('#custom-prefix-enable');
+  const customPrefixInput = el.querySelector('#custom-prefix');
+  const customSuffixEnable = el.querySelector('#custom-suffix-enable');
+  const customSuffixInput = el.querySelector('#custom-suffix');
+  const customDecimals = el.querySelector('#custom-decimals');
+  const customThousands = el.querySelector('#custom-thousands');
+  const customCurrency = el.querySelector('#custom-currency');
+  const customPresetsDiv = el.querySelector('#custom-presets');
+
+  function updateCustomOptions() {
+    customOptions.prefix = customPrefixEnable.checked ? customPrefixInput.value : '';
+    customOptions.suffix = customSuffixEnable.checked ? customSuffixInput.value : '';
+    customOptions.decimals = parseInt(customDecimals.value) || 0;
+    customOptions.thousands = customThousands.value;
+    customOptions.currencySymbol = customCurrency.value;
+  }
+  customPrefixEnable.addEventListener('change', () => { customPrefixInput.disabled = !customPrefixEnable.checked; updateCustomOptions(); doProcess(); });
+  customSuffixEnable.addEventListener('change', () => { customSuffixInput.disabled = !customSuffixEnable.checked; updateCustomOptions(); doProcess(); });
+  customPrefixInput.addEventListener('input', () => { updateCustomOptions(); doProcess(); });
+  customSuffixInput.addEventListener('input', () => { updateCustomOptions(); doProcess(); });
+  customDecimals.addEventListener('input', () => { updateCustomOptions(); doProcess(); });
+  customThousands.addEventListener('change', () => { updateCustomOptions(); doProcess(); });
+  customCurrency.addEventListener('change', () => { updateCustomOptions(); doProcess(); });
+
+  // Custom presets
+  Object.entries(CUSTOM_PRESETS).forEach(([key, preset]) => {
+    const btn = document.createElement('button');
+    btn.textContent = preset.label;
+    btn.className = 'trunc-preset-btn'; // reuse style
+    btn.style.fontSize = '11px';
+    btn.addEventListener('click', () => {
+      customPrefixEnable.checked = !!preset.prefix;
+      customPrefixInput.value = preset.prefix || '';
+      customPrefixInput.disabled = !customPrefixEnable.checked;
+      customSuffixEnable.checked = !!preset.suffix;
+      customSuffixInput.value = preset.suffix || '';
+      customSuffixInput.disabled = !customSuffixEnable.checked;
+      customDecimals.value = preset.decimals;
+      customThousands.value = preset.thousands || 'none';
+      customCurrency.value = preset.currencySymbol || '';
+      updateCustomOptions();
+      doProcess();
+    });
+    customPresetsDiv.appendChild(btn);
+  });
+
+  inputEl.addEventListener('input', doProcess);
+  el.querySelector('#batch-run').addEventListener('click', doProcess);
+  el.querySelector('#batch-copy').addEventListener('click', () => copyText(outputEl.value));
+  el.querySelector('#batch-clear').addEventListener('click', () => {
+    inputEl.value = '';
+    outputEl.value = '';
+    statsSpan.textContent = '';
+  });
+  el.querySelector('#batch-swap').addEventListener('click', () => {
+    const tmp = inputEl.value;
+    inputEl.value = outputEl.value;
+    outputEl.value = tmp;
+    setBatchStats(inputEl.value, outputEl.value);
+  });
+
+  // initial process (empty)
+  doProcess();
 }
 
 // ─── Theme Toggle ─────────────────────────────────────────────────────────────
