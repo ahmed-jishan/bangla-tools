@@ -22,6 +22,9 @@ import { sortLines, SORT_MODES, getStats as sortStats, SAMPLES as sortSamples } 
 import { truncateText, truncateWithPreset, getTextInfo, PRESETS as truncPresets, SAMPLES as truncSamples } from './tools/text-truncator.js';
 import { TEMPLATE_CATEGORIES, SAMPLES as templateSamples } from './tools/smart-templates.js';
 import { CONVERSION_TYPES, batchProcess, getStats, SAMPLES as batchSamples, CUSTOM_PRESETS } from './tools/batch-number-converter.js';
+import { findMatches, replaceText, batchReplace, buildHighlightedHtml, SAMPLES as frSamples } from './tools/find-replace.js';
+import { generateLoremBangla, THEMES as loremThemes, PRESETS as loremPresets } from './tools/lorem-bangla.js';
+import { fixPunctuation, fixWithPreset, FIXES, PRESETS as punctPresets, CATEGORIES as punctCats, SAMPLES as punctSamples } from './tools/punctuation-fixer.js';
 
 // ─── Tool Definitions ───────────────────────────────────────────────────────
 const TOOLS = [
@@ -184,6 +187,31 @@ const TOOLS = [
     category: 'writing',
     desc: 'তালিকা‑ভিত্তিক সংখ্যা → বাংলা কথায়, মুদ্রা, কমা ফরম্যাট, ব্যাচ প্রসেসিং',
   },
+  {
+   id: 'find-replace',
+   name: 'Find & Replace',
+   icon: '🔎',
+   tag: 'unicode',
+   category: 'writing',
+   desc: 'Regex সহ বাংলা text এ খোঁজো ও বদলাও',
+  },
+  {
+   id: 'lorem-bangla',
+   name: 'Lorem Bangla',
+   icon: '📝',
+   tag: 'unicode',
+   category: 'writing',
+   desc: 'Meaningful বাংলা placeholder text তৈরি করো',
+   badge: 'NEW',
+  },
+  {
+   id: 'punctuation-fixer',
+   name: 'Punctuation Fixer',
+   icon: '✏️',
+   tag: 'unicode',
+   category: 'writing',
+   desc: 'বাংলা দাঁড়ি, comma, quotes সঠিক করো',
+  },
 
 ];
 
@@ -310,6 +338,9 @@ function renderTool(id) {
   else if (id === 'text-truncator') renderTextTruncator(view);
   else if (id === 'smart-templates') renderSmartTemplates(view);
   else if (id === 'batch-number') renderBatchNumberConverter(view);
+  else if (id === 'find-replace')       renderFindReplace(view);
+  else if (id === 'lorem-bangla')       renderLoremBangla(view);
+  else if (id === 'punctuation-fixer')  renderPunctuationFixer(view);
   else view.innerHTML = `<p>Tool not found.</p>`;
 }
 
@@ -3391,6 +3422,547 @@ function renderBatchNumberConverter(container) {
 
   // initial process (empty)
   doProcess();
+}
+
+function renderFindReplace(container) {
+  let caseSensitive = false;
+  let wholeWord     = false;
+  let useRegex      = false;
+  let replaceAll    = true;
+  let batchMode     = false;
+  let batchPairs    = [{ find: '', replace: '' }];
+  let lastMatches   = [];
+ 
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">🔎</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Find & Replace</p>
+        <p class="tool-header-desc">Regular expression সহ বাংলা text এ খোঁজো এবং বদলাও</p>
+      </div>
+    </div>
+    <div class="tool-body">
+      <div class="sample-row" id="fr-samples"></div>
+ 
+      <!-- Options -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+        padding:10px 14px;background:var(--bg3);border:1px solid var(--border);
+        border-radius:var(--radius);margin-bottom:12px;">
+        <label class="fr-opt"><input type="checkbox" id="fr-case">   Case sensitive</label>
+        <label class="fr-opt"><input type="checkbox" id="fr-word">   Whole word</label>
+        <label class="fr-opt"><input type="checkbox" id="fr-regex">  Regex (.* \\d+)</label>
+        <label class="fr-opt"><input type="checkbox" id="fr-all" checked> Replace all</label>
+        <label class="fr-opt" style="margin-left:auto;">
+          <input type="checkbox" id="fr-batch"> Batch mode
+        </label>
+      </div>
+ 
+      <!-- Single mode -->
+      <div id="fr-single-mode">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+          <div>
+            <p style="font-size:11px;color:var(--text3);margin-bottom:5px;">Find</p>
+            <input id="fr-find" type="text" placeholder="খুঁজতে চাওয়া text বা regex…"
+              style="width:100%;padding:9px 12px;background:var(--bg2);border:1px solid var(--border);
+              border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-bangla);font-size:14px;outline:none;">
+          </div>
+          <div>
+            <p style="font-size:11px;color:var(--text3);margin-bottom:5px;">Replace with</p>
+            <input id="fr-replace" type="text" placeholder="প্রতিস্থাপন text… ($1 = group 1)"
+              style="width:100%;padding:9px 12px;background:var(--bg2);border:1px solid var(--border);
+              border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-bangla);font-size:14px;outline:none;">
+          </div>
+        </div>
+      </div>
+ 
+      <!-- Batch mode -->
+      <div id="fr-batch-mode" style="display:none;margin-bottom:12px;">
+        <div id="fr-batch-pairs"></div>
+        <button class="btn btn-ghost btn-sm" id="fr-add-pair" style="margin-top:6px;">+ আরো pair যোগ করো</button>
+      </div>
+ 
+      <div class="io-grid">
+        <div class="io-pane">
+          <span class="io-label">Input</span>
+          <textarea id="fr-input" placeholder="এখানে text paste করুন…" style="min-height:160px;"></textarea>
+        </div>
+        <div class="io-pane">
+          <span class="io-label">Output
+            <span id="fr-match-badge" class="io-label-tag tag-amber" style="display:none;"></span>
+          </span>
+          <textarea id="fr-output" readonly placeholder="ফলাফল এখানে দেখাবে…" style="min-height:160px;"></textarea>
+        </div>
+      </div>
+ 
+      <div class="btn-row">
+        <button class="btn btn-ghost"   id="fr-find-btn">🔍 Find</button>
+        <button class="btn btn-primary" id="fr-replace-btn">↩ Replace করো</button>
+        <button class="btn btn-ghost"   id="fr-copy">⎘ Copy</button>
+        <button class="btn btn-ghost"   id="fr-clear">✕ Clear</button>
+        <span id="fr-error" style="font-size:12px;color:var(--red);margin-left:8px;"></span>
+      </div>
+    </div>
+  `;
+ 
+  const style = document.createElement('style');
+  style.textContent = `
+    .fr-opt { display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);cursor:pointer; }
+    .fr-opt input { accent-color:var(--accent);width:14px;height:14px; }
+    .fr-input-row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
+    .fr-input-field { flex:1;padding:7px 10px;background:var(--bg2);border:1px solid var(--border);
+      border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-bangla);font-size:13px;outline:none; }
+    .fr-remove-pair { background:transparent;border:none;cursor:pointer;color:var(--text3);
+      font-size:16px;padding:4px;transition:color var(--trans); }
+    .fr-remove-pair:hover { color:var(--red); }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+ 
+  const inputEl   = el.querySelector('#fr-input');
+  const outputEl  = el.querySelector('#fr-output');
+  const findInput = el.querySelector('#fr-find');
+  const repInput  = el.querySelector('#fr-replace');
+ 
+  // Samples
+  const samplesEl = el.querySelector('#fr-samples');
+  frSamples.forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'sample-chip';
+    chip.textContent = s.label;
+    chip.addEventListener('click', () => {
+      inputEl.value = s.text;
+      findInput.value = s.find || '';
+      repInput.value = s.replace || '';
+      if (s.isRegex) { useRegex = true; el.querySelector('#fr-regex').checked = true; }
+      outputEl.value = '';
+    });
+    samplesEl.appendChild(chip);
+  });
+ 
+  // Options
+  el.querySelector('#fr-case').addEventListener('change', e => { caseSensitive = e.target.checked; });
+  el.querySelector('#fr-word').addEventListener('change', e => { wholeWord = e.target.checked; });
+  el.querySelector('#fr-regex').addEventListener('change', e => {
+    useRegex = e.target.checked;
+    el.querySelector('#fr-error').textContent = '';
+  });
+  el.querySelector('#fr-all').addEventListener('change', e => { replaceAll = e.target.checked; });
+  el.querySelector('#fr-batch').addEventListener('change', e => {
+    batchMode = e.target.checked;
+    el.querySelector('#fr-single-mode').style.display = batchMode ? 'none' : 'block';
+    el.querySelector('#fr-batch-mode').style.display  = batchMode ? 'block' : 'none';
+  });
+ 
+  // Batch pairs
+  function renderBatchPairs() {
+    const container2 = el.querySelector('#fr-batch-pairs');
+    container2.innerHTML = '';
+    batchPairs.forEach((pair, i) => {
+      const row = document.createElement('div');
+      row.className = 'fr-input-row';
+      row.innerHTML = `
+        <span style="font-size:11px;color:var(--text3);min-width:16px;">${i+1}.</span>
+        <input class="fr-input-field" placeholder="Find…" value="${pair.find}">
+        <span style="color:var(--text3);">→</span>
+        <input class="fr-input-field" placeholder="Replace…" value="${pair.replace}">
+        <button class="fr-remove-pair">×</button>
+      `;
+      const [findF, replaceF] = row.querySelectorAll('.fr-input-field');
+      findF.addEventListener('input', e => { batchPairs[i].find = e.target.value; });
+      replaceF.addEventListener('input', e => { batchPairs[i].replace = e.target.value; });
+      row.querySelector('.fr-remove-pair').addEventListener('click', () => {
+        if (batchPairs.length > 1) { batchPairs.splice(i, 1); renderBatchPairs(); }
+      });
+      container2.appendChild(row);
+    });
+  }
+  renderBatchPairs();
+ 
+  el.querySelector('#fr-add-pair').addEventListener('click', () => {
+    batchPairs.push({ find: '', replace: '' });
+    renderBatchPairs();
+  });
+ 
+  const opts = () => ({ caseSensitive, wholeWord, useRegex, replaceAll });
+ 
+  el.querySelector('#fr-find-btn').addEventListener('click', () => {
+    const text = inputEl.value;
+    const find = findInput.value;
+    if (!text || !find) return;
+    const { matches, count, error } = findMatches(text, find, opts());
+    el.querySelector('#fr-error').textContent = error || '';
+    const badge = el.querySelector('#fr-match-badge');
+    if (error) { badge.style.display = 'none'; return; }
+    badge.style.display = 'inline-block';
+    badge.textContent = `${count} match${count !== 1 ? 'es' : ''}`;
+    outputEl.value = text; // Show in output for reference
+  });
+ 
+  el.querySelector('#fr-replace-btn').addEventListener('click', () => {
+    const text = inputEl.value;
+    el.querySelector('#fr-error').textContent = '';
+    if (!text) return;
+ 
+    let result, count, error, changes;
+ 
+    if (batchMode) {
+      ({ result, changes } = batchReplace(text, batchPairs, opts()));
+      count = changes.reduce((s, c) => s + c.count, 0);
+    } else {
+      ({ result, count, error } = replaceText(text, findInput.value, repInput.value, opts()));
+    }
+ 
+    if (error) {
+      el.querySelector('#fr-error').textContent = error;
+      return;
+    }
+ 
+    outputEl.value = result;
+    const badge = el.querySelector('#fr-match-badge');
+    badge.style.display = 'inline-block';
+    badge.textContent = `${count} replacement${count !== 1 ? 's' : ''}`;
+  });
+ 
+  el.querySelector('#fr-copy').addEventListener('click', () => copyText(outputEl.value));
+  el.querySelector('#fr-clear').addEventListener('click', () => {
+    inputEl.value = ''; outputEl.value = '';
+    findInput.value = ''; repInput.value = '';
+    el.querySelector('#fr-match-badge').style.display = 'none';
+    el.querySelector('#fr-error').textContent = '';
+  });
+}
+ 
+ 
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Lorem Bangla
+// ═══════════════════════════════════════════════════════════════════
+ 
+function renderLoremBangla(container) {
+  let type    = 'paragraphs';
+  let count   = 3;
+  let theme   = 'general';
+  let sentPP  = 4;
+ 
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">📝</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Lorem Bangla Generator</p>
+        <p class="tool-header-desc">Meaningful বাংলা placeholder text — অর্থহীন নয়, বাস্তব বিষয়বস্তু থেকে তৈরি</p>
+      </div>
+    </div>
+    <div class="tool-body">
+ 
+      <!-- Quick presets -->
+      <div style="margin-bottom:14px;">
+        <p style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;
+          letter-spacing:.06em;margin-bottom:7px;">Quick Presets</p>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;" id="lorem-presets"></div>
+      </div>
+ 
+      <!-- Controls -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;
+        padding:14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:14px;">
+        <div>
+          <p style="font-size:11px;color:var(--text3);margin-bottom:5px;">ধরন</p>
+          <select id="lorem-type" style="width:100%;padding:7px 10px;background:var(--bg2);
+            border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);
+            font-family:var(--font-ui);font-size:13px;">
+            <option value="paragraphs">অনুচ্ছেদ</option>
+            <option value="sentences">বাক্য</option>
+            <option value="words">শব্দ</option>
+            <option value="list">তালিকা</option>
+            <option value="headings">Headings</option>
+          </select>
+        </div>
+        <div>
+          <p style="font-size:11px;color:var(--text3);margin-bottom:5px;">সংখ্যা</p>
+          <input type="number" id="lorem-count" value="3" min="1" max="20"
+            style="width:100%;padding:7px 10px;background:var(--bg2);border:1px solid var(--border);
+            border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-mono);font-size:14px;outline:none;">
+        </div>
+        <div id="lorem-sent-pp-wrap">
+          <p style="font-size:11px;color:var(--text3);margin-bottom:5px;">বাক্য/অনুচ্ছেদ</p>
+          <input type="number" id="lorem-spp" value="4" min="1" max="10"
+            style="width:100%;padding:7px 10px;background:var(--bg2);border:1px solid var(--border);
+            border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-mono);font-size:14px;outline:none;">
+        </div>
+      </div>
+ 
+      <!-- Theme selector -->
+      <div style="margin-bottom:14px;">
+        <p style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;
+          letter-spacing:.06em;margin-bottom:7px;">বিষয়</p>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;" id="lorem-themes"></div>
+      </div>
+ 
+      <!-- Output -->
+      <textarea id="lorem-output" readonly placeholder="Generate করা text এখানে দেখাবে…"
+        style="min-height:200px;font-family:var(--font-bangla);font-size:15px;line-height:1.9;"></textarea>
+ 
+      <div class="btn-row">
+        <button class="btn btn-primary" id="lorem-generate">⟳ Generate করো</button>
+        <button class="btn btn-ghost"   id="lorem-copy">⎘ Copy</button>
+        <button class="btn btn-ghost"   id="lorem-refresh">🔀 আরেকবার</button>
+        <span id="lorem-stats" style="font-size:12px;color:var(--text3);margin-left:auto;font-family:var(--font-mono);"></span>
+      </div>
+    </div>
+  `;
+ 
+  const style = document.createElement('style');
+  style.textContent = `
+    .lorem-preset-btn { padding:5px 12px;border:1px solid var(--border);border-radius:20px;
+      background:var(--surface2);color:var(--text2);font-size:12px;cursor:pointer;
+      font-family:var(--font-ui);transition:all var(--trans); }
+    .lorem-preset-btn:hover { border-color:var(--border2);color:var(--text); }
+    .lorem-theme-btn { padding:6px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);
+      background:var(--bg3);color:var(--text2);font-size:12.5px;cursor:pointer;
+      font-family:var(--font-ui);transition:all var(--trans); }
+    .lorem-theme-btn.active { border-color:var(--accent);background:var(--accent-dim);color:var(--accent2); }
+    .lorem-theme-btn:hover:not(.active) { border-color:var(--border2);color:var(--text); }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+ 
+  const outputEl = el.querySelector('#lorem-output');
+ 
+  // Presets
+  Object.entries(loremPresets).forEach(([key, preset]) => {
+    const btn = document.createElement('button');
+    btn.className = 'lorem-preset-btn';
+    btn.innerHTML = `${preset.icon} ${preset.label}`;
+    btn.addEventListener('click', () => {
+      type   = preset.type;
+      count  = preset.count;
+      sentPP = preset.sentencesPerPara || 4;
+      el.querySelector('#lorem-type').value  = type;
+      el.querySelector('#lorem-count').value = count;
+      el.querySelector('#lorem-spp').value   = sentPP;
+      doGenerate();
+    });
+    el.querySelector('#lorem-presets').appendChild(btn);
+  });
+ 
+  // Themes
+  const themesEl = el.querySelector('#lorem-themes');
+  Object.entries(loremThemes).forEach(([key, thm]) => {
+    const btn = document.createElement('button');
+    btn.className = 'lorem-theme-btn' + (key === theme ? ' active' : '');
+    btn.innerHTML = `${thm.icon} ${thm.label}`;
+    btn.addEventListener('click', () => {
+      theme = key;
+      themesEl.querySelectorAll('.lorem-theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      doGenerate();
+    });
+    themesEl.appendChild(btn);
+  });
+ 
+  // Controls
+  el.querySelector('#lorem-type').addEventListener('change', e => {
+    type = e.target.value;
+    el.querySelector('#lorem-sent-pp-wrap').style.display = type === 'paragraphs' ? 'block' : 'none';
+    doGenerate();
+  });
+  el.querySelector('#lorem-count').addEventListener('input', e => { count = parseInt(e.target.value) || 1; doGenerate(); });
+  el.querySelector('#lorem-spp').addEventListener('input', e => { sentPP = parseInt(e.target.value) || 4; doGenerate(); });
+ 
+  el.querySelector('#lorem-generate').addEventListener('click', doGenerate);
+  el.querySelector('#lorem-refresh').addEventListener('click', doGenerate);
+  el.querySelector('#lorem-copy').addEventListener('click', () => copyText(outputEl.value));
+ 
+  function doGenerate() {
+    const result = generateLoremBangla({ type, count, theme, sentencesPerPara: sentPP });
+    outputEl.value = result;
+    const words = result.trim().split(/\s+/).filter(Boolean).length;
+    const chars = [...result].length;
+    el.querySelector('#lorem-stats').textContent = `${words} শব্দ · ${chars} অক্ষর`;
+  }
+ 
+  doGenerate(); // Generate on load
+}
+ 
+ 
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Punctuation Fixer
+// ═══════════════════════════════════════════════════════════════════
+ 
+function renderPunctuationFixer(container) {
+  let selectedOps  = new Set(punctPresets.bangla_standard.ops);
+  let activePreset = 'bangla_standard';
+ 
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">✏️</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Punctuation Fixer</p>
+        <p class="tool-header-desc">বাংলা দাঁড়ি · comma · quotes · dash — প্রতিটি fix আলাদাভাবে চালু করো</p>
+      </div>
+    </div>
+    <div class="tool-body">
+      <div class="sample-row" id="pf-samples"></div>
+ 
+      <!-- Presets -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;" id="pf-presets"></div>
+ 
+      <!-- Fix checkboxes by category -->
+      <div id="pf-fixes-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px;margin-bottom:14px;"></div>
+ 
+      <div class="io-grid">
+        <div class="io-pane">
+          <span class="io-label">Input <span class="io-label-tag tag-bijoy">raw</span></span>
+          <textarea id="pf-input" placeholder="এখানে text paste করুন…"></textarea>
+        </div>
+        <div class="io-pane">
+          <span class="io-label">Output <span class="io-label-tag tag-unicode">fixed</span></span>
+          <textarea id="pf-output" readonly placeholder="Fixed text এখানে দেখাবে…"></textarea>
+        </div>
+      </div>
+ 
+      <div class="btn-row">
+        <button class="btn btn-primary" id="pf-run">✏️ Fix করো</button>
+        <button class="btn btn-ghost"   id="pf-copy">⎘ Copy</button>
+        <button class="btn btn-ghost"   id="pf-clear">✕ Clear</button>
+      </div>
+ 
+      <div id="pf-changes" style="margin-top:12px;display:none;"></div>
+    </div>
+  `;
+ 
+  const style = document.createElement('style');
+  style.textContent = `
+    .pf-preset-btn { padding:6px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);
+      background:var(--surface2);color:var(--text2);font-size:12.5px;cursor:pointer;
+      font-family:var(--font-ui);transition:all var(--trans);display:flex;gap:5px;align-items:center; }
+    .pf-preset-btn.active { background:var(--accent-dim);border-color:var(--accent);color:var(--accent2);font-weight:500; }
+    .pf-preset-btn:hover:not(.active) { border-color:var(--border2);color:var(--text); }
+    .pf-fix-check { display:flex;align-items:flex-start;gap:8px;padding:8px 10px;
+      border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;
+      transition:border-color var(--trans);background:var(--bg3); }
+    .pf-fix-check.checked { border-color:var(--accent);background:var(--accent-dim); }
+    .pf-fix-check input { accent-color:var(--accent);margin-top:2px;flex-shrink:0; }
+    .pf-fix-label { font-size:12.5px;color:var(--text);line-height:1.3; }
+    .pf-fix-desc  { font-size:11px;color:var(--text3);margin-top:1px;font-family:var(--font-mono); }
+    .pf-fix-check.checked .pf-fix-desc { color:var(--accent2);opacity:.7; }
+    .pf-cat-label { font-size:10.5px;font-weight:500;color:var(--text3);text-transform:uppercase;
+      letter-spacing:.06em;grid-column:1/-1;margin-top:8px;margin-bottom:2px; }
+    .pf-change-row { display:flex;align-items:center;gap:8px;padding:5px 10px;
+      border-radius:var(--radius-sm);background:var(--green-dim);font-size:12.5px;
+      color:var(--text2);margin-bottom:4px; }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+ 
+  // Samples
+  const samplesEl = el.querySelector('#pf-samples');
+  punctSamples.forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'sample-chip';
+    chip.textContent = s.label;
+    chip.addEventListener('click', () => { inputEl.value = s.text; doFix(); });
+    samplesEl.appendChild(chip);
+  });
+ 
+  // Presets
+  const presetsEl = el.querySelector('#pf-presets');
+  Object.entries(punctPresets).forEach(([key, preset]) => {
+    const btn = document.createElement('button');
+    btn.className = 'pf-preset-btn' + (key === activePreset ? ' active' : '');
+    btn.innerHTML = `${preset.icon} ${preset.label}`;
+    btn.title = preset.desc;
+    btn.addEventListener('click', () => {
+      activePreset = key;
+      selectedOps  = new Set(preset.ops);
+      presetsEl.querySelectorAll('.pf-preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderFixes();
+      doFix();
+    });
+    presetsEl.appendChild(btn);
+  });
+ 
+  // Fix checkboxes
+  const fixesGrid = el.querySelector('#pf-fixes-grid');
+  function renderFixes() {
+    fixesGrid.innerHTML = '';
+    const byCat = {};
+    Object.entries(FIXES).forEach(([key, fix]) => {
+      if (!byCat[fix.category]) byCat[fix.category] = [];
+      byCat[fix.category].push([key, fix]);
+    });
+ 
+    Object.entries(byCat).forEach(([cat, fixes]) => {
+      const catInfo = punctCats[cat] || { label: cat };
+      const label = document.createElement('div');
+      label.className = 'pf-cat-label';
+      label.textContent = catInfo.label;
+      fixesGrid.appendChild(label);
+ 
+      fixes.forEach(([key, fix]) => {
+        const row = document.createElement('div');
+        const checked = selectedOps.has(key);
+        row.className = 'pf-fix-check' + (checked ? ' checked' : '');
+        row.innerHTML = `
+          <input type="checkbox" ${checked ? 'checked' : ''}>
+          <div>
+            <p class="pf-fix-label">${fix.label}</p>
+            <p class="pf-fix-desc">${fix.desc}</p>
+          </div>`;
+        row.addEventListener('click', e => {
+          if (e.target.tagName === 'INPUT') return;
+          const cb = row.querySelector('input');
+          cb.checked = !cb.checked;
+          cb.dispatchEvent(new Event('change'));
+        });
+        row.querySelector('input').addEventListener('change', e => {
+          if (e.target.checked) { selectedOps.add(key); row.classList.add('checked'); }
+          else { selectedOps.delete(key); row.classList.remove('checked'); }
+          activePreset = null;
+          presetsEl.querySelectorAll('.pf-preset-btn').forEach(b => b.classList.remove('active'));
+          doFix();
+        });
+        fixesGrid.appendChild(row);
+      });
+    });
+  }
+  renderFixes();
+ 
+  const inputEl  = el.querySelector('#pf-input');
+  const outputEl = el.querySelector('#pf-output');
+  inputEl.addEventListener('input', doFix);
+  el.querySelector('#pf-run').addEventListener('click', doFix);
+  el.querySelector('#pf-copy').addEventListener('click', () => copyText(outputEl.value));
+  el.querySelector('#pf-clear').addEventListener('click', () => {
+    inputEl.value = ''; outputEl.value = '';
+    el.querySelector('#pf-changes').style.display = 'none';
+  });
+ 
+  function doFix() {
+    const text = inputEl.value;
+    if (!text.trim()) { outputEl.value = ''; return; }
+    const { result, changes } = fixPunctuation(text, [...selectedOps]);
+    outputEl.value = result;
+    const changesEl = el.querySelector('#pf-changes');
+    if (changes.length > 0) {
+      changesEl.style.display = 'block';
+      changesEl.innerHTML = `
+        <p style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;
+          letter-spacing:.06em;margin-bottom:6px;">${changes.length}টি fix প্রয়োগ হয়েছে</p>
+        ${changes.map(c => `
+          <div class="pf-change-row">
+            <span>✓</span><span>${c.label}</span>
+          </div>`).join('')}
+      `;
+    } else {
+      changesEl.style.display = 'none';
+    }
+  }
 }
 
 // ─── Theme Toggle ─────────────────────────────────────────────────────────────
