@@ -25,6 +25,13 @@ import { CONVERSION_TYPES, batchProcess, getStats, SAMPLES as batchSamples, CUST
 import { findMatches, replaceText, batchReplace, buildHighlightedHtml, SAMPLES as frSamples } from './tools/find-replace.js';
 import { generateLoremBangla, THEMES as loremThemes, PRESETS as loremPresets } from './tools/lorem-bangla.js';
 import { fixPunctuation, fixWithPreset, FIXES, PRESETS as punctPresets, CATEGORIES as punctCats, SAMPLES as punctSamples } from './tools/punctuation-fixer.js';
+import { CATEGORIES, convert, SAMPLES as unitSamples } from './tools/unit-converter.js';
+import { getAllWorkflows, saveWorkflow, deleteWorkflow, duplicateWorkflow, getAllTools, registerTool } from './tools/workflow-builder.js';
+import { getAllPresets, savePreset, loadPreset } from './tools/presets-manager.js';
+import { diffTexts, getDiffStats as diffStats, renderInlineDiff, renderOldSide, renderNewSide, SAMPLES as diffSamples } from './tools/text-diff.js';
+import { extract, extractCustom, extractAll, PATTERNS, SAMPLES as exSamples } from './tools/text-extractor.js';
+import { inspectText, getInspectorStats, SAMPLES as uniSamples } from './tools/unicode-inspector.js';
+import { MODES as encodeModes, getEncodingStats, SAMPLES as b64Samples } from './tools/base64-encoder.js';
 
 // ─── Tool Definitions ───────────────────────────────────────────────────────
 const TOOLS = [
@@ -188,29 +195,77 @@ const TOOLS = [
     desc: 'তালিকা‑ভিত্তিক সংখ্যা → বাংলা কথায়, মুদ্রা, কমা ফরম্যাট, ব্যাচ প্রসেসিং',
   },
   {
-   id: 'find-replace',
-   name: 'Find & Replace',
-   icon: '🔎',
-   tag: 'unicode',
-   category: 'writing',
-   desc: 'Regex সহ বাংলা text এ খোঁজো ও বদলাও',
+    id: 'find-replace',
+    name: 'Find & Replace',
+    icon: '🔎',
+    tag: 'unicode',
+    category: 'writing',
+    desc: 'Regex সহ বাংলা text এ খোঁজো ও বদলাও',
   },
   {
-   id: 'lorem-bangla',
-   name: 'Lorem Bangla',
-   icon: '📝',
-   tag: 'unicode',
-   category: 'writing',
-   desc: 'Meaningful বাংলা placeholder text তৈরি করো',
-   badge: 'NEW',
+    id: 'lorem-bangla',
+    name: 'Lorem Bangla',
+    icon: '📝',
+    tag: 'unicode',
+    category: 'writing',
+    desc: 'Meaningful বাংলা placeholder text তৈরি করো',
+    badge: 'NEW',
   },
   {
-   id: 'punctuation-fixer',
-   name: 'Punctuation Fixer',
-   icon: '✏️',
-   tag: 'unicode',
-   category: 'writing',
-   desc: 'বাংলা দাঁড়ি, comma, quotes সঠিক করো',
+    id: 'punctuation-fixer',
+    name: 'Punctuation Fixer',
+    icon: '✏️',
+    tag: 'unicode',
+    category: 'writing',
+    desc: 'বাংলা দাঁড়ি, comma, quotes সঠিক করো',
+  },
+  {
+    id: 'unit-converter',
+    name: 'Unit Converter',
+    icon: '📏',
+    tag: 'unicode',
+    category: 'utility',
+    desc: 'জমি, ওজন, দৈর্ঘ্য, তরল, তাপমাত্রা — বাংলা ইউনিট কনভার্টার',
+  },
+  {
+    id: 'workflow-builder',
+    name: 'Workflow Builder',
+    icon: '⚙️',
+    tag: 'pro',
+    category: 'utility',
+    desc: 'একাধিক টুল চেইন করুন ও প্রিসেট ব্যবহার করুন',
+  },
+  {
+    id: 'text-diff',
+    name: 'Text Diff Viewer',
+    icon: '🗂️',
+    tag: 'unicode',
+    category: 'writing',
+    desc: 'দুটো text এর পার্থক্য highlight করে দেখাও',
+  },
+  {
+    id: 'text-extractor',
+    name: 'Text Extractor',
+    icon: '📋',
+    tag: 'unicode',
+    category: 'utility',
+    desc: 'URL, email, phone, number — text থেকে বের করো',
+  },
+  {
+    id: 'unicode-inspector',
+    name: 'Unicode Inspector',
+    icon: '🔐',
+    tag: 'unicode',
+    category: 'utility',
+    desc: 'প্রতিটি character এর code point ও details দেখো',
+  },
+  {
+    id: 'base64-encoder',
+    name: 'Base64 / Encoder',
+    icon: '📦',
+    tag: 'unicode',
+    category: 'utility',
+    desc: 'Base64, Hex, URL, HTML entity — encode ও decode',
   },
 
 ];
@@ -338,9 +393,15 @@ function renderTool(id) {
   else if (id === 'text-truncator') renderTextTruncator(view);
   else if (id === 'smart-templates') renderSmartTemplates(view);
   else if (id === 'batch-number') renderBatchNumberConverter(view);
-  else if (id === 'find-replace')       renderFindReplace(view);
-  else if (id === 'lorem-bangla')       renderLoremBangla(view);
-  else if (id === 'punctuation-fixer')  renderPunctuationFixer(view);
+  else if (id === 'find-replace') renderFindReplace(view);
+  else if (id === 'lorem-bangla') renderLoremBangla(view);
+  else if (id === 'punctuation-fixer') renderPunctuationFixer(view);
+  else if (id === 'unit-converter') renderUnitConverter(view);
+  else if (id === 'workflow-builder') renderWorkflowBuilder(view);
+  else if (id === 'text-diff') renderTextDiff(view);
+  else if (id === 'text-extractor') renderTextExtractor(view);
+  else if (id === 'unicode-inspector') renderUnicodeInspector(view);
+  else if (id === 'base64-encoder') renderBase64Encoder(view);
   else view.innerHTML = `<p>Tool not found.</p>`;
 }
 
@@ -3426,13 +3487,13 @@ function renderBatchNumberConverter(container) {
 
 function renderFindReplace(container) {
   let caseSensitive = false;
-  let wholeWord     = false;
-  let useRegex      = false;
-  let replaceAll    = true;
-  let batchMode     = false;
-  let batchPairs    = [{ find: '', replace: '' }];
-  let lastMatches   = [];
- 
+  let wholeWord = false;
+  let useRegex = false;
+  let replaceAll = true;
+  let batchMode = false;
+  let batchPairs = [{ find: '', replace: '' }];
+  let lastMatches = [];
+
   const el = document.createElement('div');
   el.className = 'tool-card';
   el.innerHTML = `
@@ -3505,7 +3566,7 @@ function renderFindReplace(container) {
       </div>
     </div>
   `;
- 
+
   const style = document.createElement('style');
   style.textContent = `
     .fr-opt { display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);cursor:pointer; }
@@ -3519,12 +3580,12 @@ function renderFindReplace(container) {
   `;
   container.appendChild(style);
   container.appendChild(el);
- 
-  const inputEl   = el.querySelector('#fr-input');
-  const outputEl  = el.querySelector('#fr-output');
+
+  const inputEl = el.querySelector('#fr-input');
+  const outputEl = el.querySelector('#fr-output');
   const findInput = el.querySelector('#fr-find');
-  const repInput  = el.querySelector('#fr-replace');
- 
+  const repInput = el.querySelector('#fr-replace');
+
   // Samples
   const samplesEl = el.querySelector('#fr-samples');
   frSamples.forEach(s => {
@@ -3540,7 +3601,7 @@ function renderFindReplace(container) {
     });
     samplesEl.appendChild(chip);
   });
- 
+
   // Options
   el.querySelector('#fr-case').addEventListener('change', e => { caseSensitive = e.target.checked; });
   el.querySelector('#fr-word').addEventListener('change', e => { wholeWord = e.target.checked; });
@@ -3552,9 +3613,9 @@ function renderFindReplace(container) {
   el.querySelector('#fr-batch').addEventListener('change', e => {
     batchMode = e.target.checked;
     el.querySelector('#fr-single-mode').style.display = batchMode ? 'none' : 'block';
-    el.querySelector('#fr-batch-mode').style.display  = batchMode ? 'block' : 'none';
+    el.querySelector('#fr-batch-mode').style.display = batchMode ? 'block' : 'none';
   });
- 
+
   // Batch pairs
   function renderBatchPairs() {
     const container2 = el.querySelector('#fr-batch-pairs');
@@ -3563,7 +3624,7 @@ function renderFindReplace(container) {
       const row = document.createElement('div');
       row.className = 'fr-input-row';
       row.innerHTML = `
-        <span style="font-size:11px;color:var(--text3);min-width:16px;">${i+1}.</span>
+        <span style="font-size:11px;color:var(--text3);min-width:16px;">${i + 1}.</span>
         <input class="fr-input-field" placeholder="Find…" value="${pair.find}">
         <span style="color:var(--text3);">→</span>
         <input class="fr-input-field" placeholder="Replace…" value="${pair.replace}">
@@ -3579,14 +3640,14 @@ function renderFindReplace(container) {
     });
   }
   renderBatchPairs();
- 
+
   el.querySelector('#fr-add-pair').addEventListener('click', () => {
     batchPairs.push({ find: '', replace: '' });
     renderBatchPairs();
   });
- 
+
   const opts = () => ({ caseSensitive, wholeWord, useRegex, replaceAll });
- 
+
   el.querySelector('#fr-find-btn').addEventListener('click', () => {
     const text = inputEl.value;
     const find = findInput.value;
@@ -3599,32 +3660,32 @@ function renderFindReplace(container) {
     badge.textContent = `${count} match${count !== 1 ? 'es' : ''}`;
     outputEl.value = text; // Show in output for reference
   });
- 
+
   el.querySelector('#fr-replace-btn').addEventListener('click', () => {
     const text = inputEl.value;
     el.querySelector('#fr-error').textContent = '';
     if (!text) return;
- 
+
     let result, count, error, changes;
- 
+
     if (batchMode) {
       ({ result, changes } = batchReplace(text, batchPairs, opts()));
       count = changes.reduce((s, c) => s + c.count, 0);
     } else {
       ({ result, count, error } = replaceText(text, findInput.value, repInput.value, opts()));
     }
- 
+
     if (error) {
       el.querySelector('#fr-error').textContent = error;
       return;
     }
- 
+
     outputEl.value = result;
     const badge = el.querySelector('#fr-match-badge');
     badge.style.display = 'inline-block';
     badge.textContent = `${count} replacement${count !== 1 ? 's' : ''}`;
   });
- 
+
   el.querySelector('#fr-copy').addEventListener('click', () => copyText(outputEl.value));
   el.querySelector('#fr-clear').addEventListener('click', () => {
     inputEl.value = ''; outputEl.value = '';
@@ -3633,18 +3694,18 @@ function renderFindReplace(container) {
     el.querySelector('#fr-error').textContent = '';
   });
 }
- 
- 
+
+
 // ═══════════════════════════════════════════════════════════════════
 // RENDER: Lorem Bangla
 // ═══════════════════════════════════════════════════════════════════
- 
+
 function renderLoremBangla(container) {
-  let type    = 'paragraphs';
-  let count   = 3;
-  let theme   = 'general';
-  let sentPP  = 4;
- 
+  let type = 'paragraphs';
+  let count = 3;
+  let theme = 'general';
+  let sentPP = 4;
+
   const el = document.createElement('div');
   el.className = 'tool-card';
   el.innerHTML = `
@@ -3712,7 +3773,7 @@ function renderLoremBangla(container) {
       </div>
     </div>
   `;
- 
+
   const style = document.createElement('style');
   style.textContent = `
     .lorem-preset-btn { padding:5px 12px;border:1px solid var(--border);border-radius:20px;
@@ -3727,26 +3788,26 @@ function renderLoremBangla(container) {
   `;
   container.appendChild(style);
   container.appendChild(el);
- 
+
   const outputEl = el.querySelector('#lorem-output');
- 
+
   // Presets
   Object.entries(loremPresets).forEach(([key, preset]) => {
     const btn = document.createElement('button');
     btn.className = 'lorem-preset-btn';
     btn.innerHTML = `${preset.icon} ${preset.label}`;
     btn.addEventListener('click', () => {
-      type   = preset.type;
-      count  = preset.count;
+      type = preset.type;
+      count = preset.count;
       sentPP = preset.sentencesPerPara || 4;
-      el.querySelector('#lorem-type').value  = type;
+      el.querySelector('#lorem-type').value = type;
       el.querySelector('#lorem-count').value = count;
-      el.querySelector('#lorem-spp').value   = sentPP;
+      el.querySelector('#lorem-spp').value = sentPP;
       doGenerate();
     });
     el.querySelector('#lorem-presets').appendChild(btn);
   });
- 
+
   // Themes
   const themesEl = el.querySelector('#lorem-themes');
   Object.entries(loremThemes).forEach(([key, thm]) => {
@@ -3761,7 +3822,7 @@ function renderLoremBangla(container) {
     });
     themesEl.appendChild(btn);
   });
- 
+
   // Controls
   el.querySelector('#lorem-type').addEventListener('change', e => {
     type = e.target.value;
@@ -3770,11 +3831,11 @@ function renderLoremBangla(container) {
   });
   el.querySelector('#lorem-count').addEventListener('input', e => { count = parseInt(e.target.value) || 1; doGenerate(); });
   el.querySelector('#lorem-spp').addEventListener('input', e => { sentPP = parseInt(e.target.value) || 4; doGenerate(); });
- 
+
   el.querySelector('#lorem-generate').addEventListener('click', doGenerate);
   el.querySelector('#lorem-refresh').addEventListener('click', doGenerate);
   el.querySelector('#lorem-copy').addEventListener('click', () => copyText(outputEl.value));
- 
+
   function doGenerate() {
     const result = generateLoremBangla({ type, count, theme, sentencesPerPara: sentPP });
     outputEl.value = result;
@@ -3782,19 +3843,19 @@ function renderLoremBangla(container) {
     const chars = [...result].length;
     el.querySelector('#lorem-stats').textContent = `${words} শব্দ · ${chars} অক্ষর`;
   }
- 
+
   doGenerate(); // Generate on load
 }
- 
- 
+
+
 // ═══════════════════════════════════════════════════════════════════
 // RENDER: Punctuation Fixer
 // ═══════════════════════════════════════════════════════════════════
- 
+
 function renderPunctuationFixer(container) {
-  let selectedOps  = new Set(punctPresets.bangla_standard.ops);
+  let selectedOps = new Set(punctPresets.bangla_standard.ops);
   let activePreset = 'bangla_standard';
- 
+
   const el = document.createElement('div');
   el.className = 'tool-card';
   el.innerHTML = `
@@ -3834,7 +3895,7 @@ function renderPunctuationFixer(container) {
       <div id="pf-changes" style="margin-top:12px;display:none;"></div>
     </div>
   `;
- 
+
   const style = document.createElement('style');
   style.textContent = `
     .pf-preset-btn { padding:6px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);
@@ -3858,7 +3919,7 @@ function renderPunctuationFixer(container) {
   `;
   container.appendChild(style);
   container.appendChild(el);
- 
+
   // Samples
   const samplesEl = el.querySelector('#pf-samples');
   punctSamples.forEach(s => {
@@ -3868,7 +3929,7 @@ function renderPunctuationFixer(container) {
     chip.addEventListener('click', () => { inputEl.value = s.text; doFix(); });
     samplesEl.appendChild(chip);
   });
- 
+
   // Presets
   const presetsEl = el.querySelector('#pf-presets');
   Object.entries(punctPresets).forEach(([key, preset]) => {
@@ -3878,7 +3939,7 @@ function renderPunctuationFixer(container) {
     btn.title = preset.desc;
     btn.addEventListener('click', () => {
       activePreset = key;
-      selectedOps  = new Set(preset.ops);
+      selectedOps = new Set(preset.ops);
       presetsEl.querySelectorAll('.pf-preset-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       renderFixes();
@@ -3886,7 +3947,7 @@ function renderPunctuationFixer(container) {
     });
     presetsEl.appendChild(btn);
   });
- 
+
   // Fix checkboxes
   const fixesGrid = el.querySelector('#pf-fixes-grid');
   function renderFixes() {
@@ -3896,14 +3957,14 @@ function renderPunctuationFixer(container) {
       if (!byCat[fix.category]) byCat[fix.category] = [];
       byCat[fix.category].push([key, fix]);
     });
- 
+
     Object.entries(byCat).forEach(([cat, fixes]) => {
       const catInfo = punctCats[cat] || { label: cat };
       const label = document.createElement('div');
       label.className = 'pf-cat-label';
       label.textContent = catInfo.label;
       fixesGrid.appendChild(label);
- 
+
       fixes.forEach(([key, fix]) => {
         const row = document.createElement('div');
         const checked = selectedOps.has(key);
@@ -3932,8 +3993,8 @@ function renderPunctuationFixer(container) {
     });
   }
   renderFixes();
- 
-  const inputEl  = el.querySelector('#pf-input');
+
+  const inputEl = el.querySelector('#pf-input');
   const outputEl = el.querySelector('#pf-output');
   inputEl.addEventListener('input', doFix);
   el.querySelector('#pf-run').addEventListener('click', doFix);
@@ -3942,7 +4003,7 @@ function renderPunctuationFixer(container) {
     inputEl.value = ''; outputEl.value = '';
     el.querySelector('#pf-changes').style.display = 'none';
   });
- 
+
   function doFix() {
     const text = inputEl.value;
     if (!text.trim()) { outputEl.value = ''; return; }
@@ -3962,6 +4023,1847 @@ function renderPunctuationFixer(container) {
     } else {
       changesEl.style.display = 'none';
     }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Bangla Unit Converter
+// ═══════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Bangla Unit Converter (Improved Dark Mode & Presets)
+// ═══════════════════════════════════════════════════════════════════
+
+function renderUnitConverter(container) {
+  let activeCategory = 'land';
+  let leftUnit = 'bigha';
+  let rightUnit = 'acre';
+  let leftValue = 1;
+  let rightValue = 0.661;
+
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">📏</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Bangla Unit Converter</p>
+        <p class="tool-header-desc">জমি · ওজন · দৈর্ঘ্য · তরল · তাপমাত্রা — একক রূপান্তর</p>
+      </div>
+    </div>
+    <div class="tool-body">
+      <!-- Category tabs -->
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px;" id="uc-categories"></div>
+
+      <!-- Two‑column converter -->
+      <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:12px; align-items:center; margin-bottom:20px;">
+        <div class="uc-pane" style="background:var(--bg3); border-radius:var(--radius); padding:16px;">
+          <p id="uc-left-label" style="font-size:12px; font-weight:500; margin-bottom:6px;">বাম একক</p>
+          <select id="uc-left-unit" class="uc-select" style="width:100%; padding:8px; margin-bottom:12px;"></select>
+          <input type="number" id="uc-left-value" value="${leftValue}" step="any" class="uc-input" style="width:100%; padding:8px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-sm);">
+        </div>
+        <div style="font-size:24px; color:var(--accent);">⇆</div>
+        <div class="uc-pane" style="background:var(--bg3); border-radius:var(--radius); padding:16px;">
+          <p id="uc-right-label" style="font-size:12px; font-weight:500; margin-bottom:6px;">ডান একক</p>
+          <select id="uc-right-unit" class="uc-select" style="width:100%; padding:8px; margin-bottom:12px;"></select>
+          <input type="number" id="uc-right-value" value="${rightValue}" step="any" class="uc-input" style="width:100%; padding:8px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-sm);">
+        </div>
+      </div>
+
+      <!-- Preset buttons (improved) -->
+      <div style="margin-top:10px;">
+        <p style="font-size:11px; color:var(--text3); margin-bottom:8px;">📌 উদাহরণ (এক ক্লিকে সেট)</p>
+        <div id="uc-presets" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="uc-copy-left">⎘ বাম মান কপি</button>
+        <button class="btn btn-ghost" id="uc-copy-right">⎘ ডান মান কপি</button>
+        <button class="btn btn-ghost" id="uc-swap">⇄ একক বিনিময়</button>
+      </div>
+    </div>
+  `;
+
+  // Improved styles for dark mode compatibility
+  const style = document.createElement('style');
+  style.textContent = `
+    .uc-cat-btn {
+      padding: 5px 14px;
+      border: 1px solid var(--border);
+      border-radius: 30px;
+      background: transparent;
+      color: var(--text2);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+    .uc-cat-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .uc-cat-btn:hover:not(.active) {
+      background: var(--surface2);
+      border-color: var(--border2);
+      color: var(--text);
+    }
+
+    /* Select dropdown styling (light/dark aware) */
+    .uc-select {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px;
+      color: var(--text);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      cursor: pointer;
+      transition: border 0.2s;
+    }
+    .uc-select:hover {
+      border-color: var(--border2);
+    }
+    .uc-select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    /* option background in dark mode */
+    .uc-select option {
+      background: var(--bg1);
+      color: var(--text);
+    }
+
+    /* Preset buttons – high contrast */
+    .uc-preset-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-family: var(--font-ui);
+      color: var(--text);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .uc-preset-btn:hover {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent2);
+      transform: translateY(-1px);
+    }
+
+    /* Input numbers */
+    .uc-input {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 14px;
+    }
+    .uc-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+
+  // Toast helper
+  let toastEl = null;
+  function showToast(msg) {
+    if (!toastEl) {
+      toastEl = document.createElement('div');
+      toastEl.className = 'uc-toast';
+      toastEl.style.cssText = `
+        position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+        background: #2e7d32; color: white; padding: 8px 16px; border-radius: 40px;
+        font-size: 13px; font-family: var(--font-ui); z-index: 10000;
+        opacity: 0; transition: opacity 0.2s; pointer-events: none;
+      `;
+      document.body.appendChild(toastEl);
+    }
+    toastEl.textContent = msg;
+    toastEl.style.opacity = '1';
+    setTimeout(() => { toastEl.style.opacity = '0'; }, 2000);
+  }
+
+  function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => showToast('কপি হয়েছে!')).catch(() => showToast('ব্যর্থ'));
+  }
+
+  // Category buttons
+  const catContainer = el.querySelector('#uc-categories');
+  Object.entries(CATEGORIES).forEach(([key, cat]) => {
+    const btn = document.createElement('button');
+    btn.innerHTML = `${cat.icon} ${cat.name}`;
+    btn.className = 'uc-cat-btn' + (key === activeCategory ? ' active' : '');
+    btn.dataset.cat = key;
+    btn.addEventListener('click', () => {
+      activeCategory = key;
+      document.querySelectorAll('#uc-categories .uc-cat-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      // reset units to first two of the category
+      const units = Object.keys(CATEGORIES[activeCategory].units);
+      leftUnit = units[0];
+      rightUnit = units[1] || units[0];
+      leftValue = 1;
+      populateUnitSelectors();
+      updateBoth();
+      updatePresets();
+    });
+    catContainer.appendChild(btn);
+  });
+
+  const leftSelect = el.querySelector('#uc-left-unit');
+  const rightSelect = el.querySelector('#uc-right-unit');
+  const leftInput = el.querySelector('#uc-left-value');
+  const rightInput = el.querySelector('#uc-right-value');
+  const leftLabel = el.querySelector('#uc-left-label');
+  const rightLabel = el.querySelector('#uc-right-label');
+
+  function populateUnitSelectors() {
+    const units = CATEGORIES[activeCategory].units;
+    const unitKeys = Object.keys(units);
+    leftSelect.innerHTML = '';
+    rightSelect.innerHTML = '';
+    unitKeys.forEach(key => {
+      const unit = units[key];
+      const optionLeft = document.createElement('option');
+      optionLeft.value = key;
+      optionLeft.textContent = `${unit.name} (${unit.nameEn})`;
+      const optionRight = optionLeft.cloneNode(true);
+      leftSelect.appendChild(optionLeft);
+      rightSelect.appendChild(optionRight);
+    });
+    leftSelect.value = leftUnit;
+    rightSelect.value = rightUnit;
+    // update labels
+    leftLabel.textContent = `বাম একক — ${units[leftUnit]?.name || ''} থেকে কনভার্ট`;
+    rightLabel.textContent = `ডান একক — ${units[rightUnit]?.name || ''} তে কনভার্ট`;
+  }
+
+  function convertLeftToRight() {
+    const from = leftSelect.value;
+    const to = rightSelect.value;
+    let val = parseFloat(leftInput.value);
+    if (isNaN(val)) val = 0;
+    const result = convert(val, from, to, activeCategory);
+    rightInput.value = result.toFixed(6);
+    rightValue = result;
+  }
+  function convertRightToLeft() {
+    const from = rightSelect.value;
+    const to = leftSelect.value;
+    let val = parseFloat(rightInput.value);
+    if (isNaN(val)) val = 0;
+    const result = convert(val, from, to, activeCategory);
+    leftInput.value = result.toFixed(6);
+    leftValue = result;
+  }
+
+  function updateBoth() {
+    convertLeftToRight();
+  }
+
+  leftInput.addEventListener('input', convertLeftToRight);
+  rightInput.addEventListener('input', convertRightToLeft);
+  leftSelect.addEventListener('change', () => {
+    leftUnit = leftSelect.value;
+    updateBoth();
+  });
+  rightSelect.addEventListener('change', () => {
+    rightUnit = rightSelect.value;
+    updateBoth();
+  });
+
+  // Swap units and values
+  el.querySelector('#uc-swap').addEventListener('click', () => {
+    const tempUnit = leftSelect.value;
+    leftSelect.value = rightSelect.value;
+    rightSelect.value = tempUnit;
+    const tempVal = leftInput.value;
+    leftInput.value = rightInput.value;
+    rightInput.value = tempVal;
+    leftUnit = leftSelect.value;
+    rightUnit = rightSelect.value;
+    updateBoth();
+  });
+
+  el.querySelector('#uc-copy-left').addEventListener('click', () => copyToClipboard(leftInput.value));
+  el.querySelector('#uc-copy-right').addEventListener('click', () => copyToClipboard(rightInput.value));
+
+  // Preset buttons with improved professional look
+  const presetsContainer = el.querySelector('#uc-presets');
+  function updatePresets() {
+    presetsContainer.innerHTML = '';
+    let presetList = [];
+    if (activeCategory === 'land') {
+      presetList = [
+        { value: 1, fromName: 'বিঘা', toName: 'একর', label: '১ বিঘা = ? একর' },
+        { value: 1, fromName: 'কাঠা', toName: 'বর্গফুট', label: '১ কাঠা = ? বর্গফুট' },
+        { value: 1, fromName: 'শতাংশ', toName: 'বর্গফুট', label: '১ শতাংশ = ? বর্গফুট' },
+        { value: 1, fromName: 'একর', toName: 'বর্গফুট', label: '১ একর = ? বর্গফুট' }
+      ];
+    } else if (activeCategory === 'weight') {
+      presetList = [
+        { value: 1, fromName: 'মন', toName: 'কিলোগ্রাম', label: '১ মন = ? কেজি' },
+        { value: 1, fromName: 'সের', toName: 'গ্রাম', label: '১ সের = ? গ্রাম' },
+        { value: 1, fromName: 'কিলোগ্রাম', toName: 'পাউন্ড', label: '১ কেজি = ? পাউন্ড' },
+        { value: 1, fromName: 'তোলা', toName: 'গ্রাম', label: '১ তোলা = ? গ্রাম' }
+      ];
+    } else if (activeCategory === 'length') {
+      presetList = [
+        { value: 1, fromName: 'গজ', toName: 'ফুট', label: '১ গজ = ? ফুট' },
+        { value: 1, fromName: 'মিটার', toName: 'ফুট', label: '১ মিটার = ? ফুট' },
+        { value: 1, fromName: 'কিলোমিটার', toName: 'মাইল', label: '১ কিমি = ? মাইল' },
+        { value: 1, fromName: 'ইঞ্চি', toName: 'সেন্টিমিটার', label: '১ ইঞ্চি = ? সেমি' }
+      ];
+    } else if (activeCategory === 'volume') {
+      presetList = [
+        { value: 1, fromName: 'লিটার', toName: 'গ্যালন', label: '১ লিটার = ? গ্যালন' },
+        { value: 1000, fromName: 'মিলিলিটার', toName: 'লিটার', label: '১০০০ মিলি = ? লিটার' },
+        { value: 1, fromName: 'গ্যালন', toName: 'লিটার', label: '১ গ্যালন = ? লিটার' }
+      ];
+    } else if (activeCategory === 'temp') {
+      presetList = [
+        { value: 0, fromName: 'সেলসিয়াস', toName: 'ফারেনহাইট', label: '০°C = ? °F' },
+        { value: 100, fromName: 'সেলসিয়াস', toName: 'কেলভিন', label: '১০০°C = ? K' },
+        { value: 32, fromName: 'ফারেনহাইট', toName: 'সেলসিয়াস', label: '৩২°F = ? °C' }
+      ];
+    }
+
+    const unitsObj = CATEGORIES[activeCategory].units;
+    presetList.forEach(preset => {
+      const fromKey = Object.keys(unitsObj).find(k => unitsObj[k].name === preset.fromName);
+      const toKey = Object.keys(unitsObj).find(k => unitsObj[k].name === preset.toName);
+      if (fromKey && toKey) {
+        const btn = document.createElement('button');
+        btn.className = 'uc-preset-btn';
+        btn.textContent = preset.label;
+        btn.addEventListener('click', () => {
+          leftSelect.value = fromKey;
+          rightSelect.value = toKey;
+          leftInput.value = preset.value;
+          updateBoth();
+          // highlight active preset briefly (visual feedback)
+          btn.style.background = 'var(--accent-dim)';
+          setTimeout(() => { btn.style.background = ''; }, 200);
+        });
+        presetsContainer.appendChild(btn);
+      }
+    });
+  }
+
+  // initial load
+  populateUnitSelectors();
+  updatePresets();
+  updateBoth();
+}
+
+// Inside app.js – add this render function
+/**
+ * renderWorkflowBuilder - Professional Workflow Builder + Presets (Standalone)
+ * No external dependencies. Uses localStorage for persistence.
+ */
+function renderWorkflowBuilder(container) {
+  // ======================== STORAGE KEYS ========================
+  const STORAGE_PRESETS = 'bangla_tool_presets';
+  const STORAGE_WORKFLOWS = 'bangla_tool_workflows';
+
+  // ======================== TOOL REGISTRY ========================
+  // You must register your tools before using them in workflows.
+  const toolRegistry = new Map(); // id -> { name, icon, process, getSettings?, applySettings? }
+
+  window.registerTool = function (id, meta) {
+    toolRegistry.set(id, meta);
+  };
+
+  function getAllTools() {
+    return Array.from(toolRegistry.entries()).map(([id, meta]) => ({ id, ...meta }));
+  }
+
+  // Register tools for workflows
+  window.registerTool('bijoy-to-unicode', { name: 'Bijoy → Unicode', icon: '🔄', process: bijoyToUnicode });
+  window.registerTool('unicode-to-bijoy', { name: 'Unicode → Bijoy', icon: '🔄', process: unicodeToBijoy });
+
+  // ======================== PRESET FUNCTIONS ========================
+  function getAllPresets(toolId) {
+    const all = JSON.parse(localStorage.getItem(STORAGE_PRESETS) || '{}');
+    return all[toolId] || [];
+  }
+
+  function savePreset(toolId, presetName, settings) {
+    const all = JSON.parse(localStorage.getItem(STORAGE_PRESETS) || '{}');
+    if (!all[toolId]) all[toolId] = [];
+    const existing = all[toolId].find(p => p.name === presetName);
+    if (existing) {
+      existing.settings = settings;
+    } else {
+      all[toolId].push({ id: Date.now().toString(), name: presetName, settings });
+    }
+    localStorage.setItem(STORAGE_PRESETS, JSON.stringify(all));
+  }
+
+  function loadPreset(toolId, presetId) {
+    const all = JSON.parse(localStorage.getItem(STORAGE_PRESETS) || '{}');
+    return all[toolId]?.find(p => p.id === presetId) || null;
+  }
+
+  // ======================== WORKFLOW FUNCTIONS ========================
+  function getAllWorkflows() {
+    return JSON.parse(localStorage.getItem(STORAGE_WORKFLOWS) || '[]');
+  }
+
+  function saveWorkflow(workflow) {
+    let workflows = getAllWorkflows();
+    if (workflow.id) {
+      const idx = workflows.findIndex(w => w.id === workflow.id);
+      if (idx !== -1) workflows[idx] = workflow;
+      else workflows.push(workflow);
+    } else {
+      workflow.id = Date.now().toString();
+      workflows.push(workflow);
+    }
+    localStorage.setItem(STORAGE_WORKFLOWS, JSON.stringify(workflows));
+    return workflow.id;
+  }
+
+  function deleteWorkflow(id) {
+    let workflows = getAllWorkflows();
+    workflows = workflows.filter(w => w.id !== id);
+    localStorage.setItem(STORAGE_WORKFLOWS, JSON.stringify(workflows));
+  }
+
+  function duplicateWorkflow(id) {
+    const workflows = getAllWorkflows();
+    const original = workflows.find(w => w.id === id);
+    if (!original) return null;
+    const copy = { ...original, id: null, name: original.name + ' (কপি)' };
+    saveWorkflow(copy);
+    return copy;
+  }
+
+  function onStorageChange(cb) {
+    window.addEventListener('storage', (e) => {
+      if (e.key === STORAGE_WORKFLOWS || e.key === STORAGE_PRESETS) cb();
+    });
+    return () => window.removeEventListener('storage', cb);
+  }
+
+  // ======================== WORKFLOW VALIDATION ========================
+  function validateWorkflow(workflow) {
+    const errors = [];
+    if (!workflow.name || workflow.name.trim() === '') errors.push('ওয়ার্কফ্লোর নাম প্রয়োজন');
+    if (!workflow.steps || workflow.steps.length === 0) errors.push('কমপক্ষে একটি ধাপ প্রয়োজন');
+    workflow.steps.forEach((step, i) => {
+      if (!step.toolId) errors.push(`ধাপ ${i + 1}: টুল নির্বাচন করুন`);
+      else if (!toolRegistry.has(step.toolId)) errors.push(`ধাপ ${i + 1}: টুল "${step.toolId}" রেজিস্টার করা নেই`);
+    });
+    return errors;
+  }
+
+  // ======================== WORKFLOW RUNNER ========================
+  async function runWorkflow(workflow, inputText, options = {}) {
+    const { signal, onProgress, retries = 0, retryDelay = 300 } = options;
+    const startTime = performance.now();
+    let current = inputText;
+    const stepResults = [];
+
+    for (let i = 0; i < workflow.steps.length; i++) {
+      if (signal?.aborted) {
+        return { finalOutput: current, stepResults, aborted: true, durationMs: performance.now() - startTime };
+      }
+      const step = workflow.steps[i];
+      const tool = toolRegistry.get(step.toolId);
+      if (!tool) {
+        const err = new Error(`Tool "${step.toolId}" not found`);
+        if (onProgress) onProgress({ index: i, status: 'error', error: err.message });
+        throw err;
+      }
+      // Apply preset if any
+      if (step.presetId && tool.applySettings) {
+        const preset = loadPreset(step.toolId, step.presetId);
+        if (preset) tool.applySettings(preset.settings);
+      }
+      let output;
+      let attempt = 0;
+      while (attempt <= retries) {
+        try {
+          const stepStart = performance.now();
+          output = await tool.process(current);
+          const durationMs = performance.now() - stepStart;
+          if (onProgress) onProgress({ index: i, status: 'done', output, durationMs });
+          break;
+        } catch (err) {
+          if (attempt === retries) {
+            if (onProgress) onProgress({ index: i, status: 'error', error: err.message });
+            throw err;
+          }
+          await new Promise(r => setTimeout(r, retryDelay));
+          attempt++;
+        }
+      }
+      current = output;
+      stepResults.push({ step, input: current, output: current });
+    }
+    return { finalOutput: current, stepResults, aborted: false, durationMs: performance.now() - startTime };
+  }
+
+  // ======================== CSS (injected once) ========================
+  const STYLE_ID = '__wfb_styles_standalone__';
+  if (!document.getElementById(STYLE_ID)) {
+    const styleEl = document.createElement('style');
+    styleEl.id = STYLE_ID;
+    styleEl.textContent = `
+      :root {
+        --wfb-radius: 10px;
+        --wfb-radius-sm: 6px;
+        --wfb-gap: 12px;
+        --wfb-sidebar-w: 220px;
+      }
+      .wfb-root * { box-sizing: border-box; }
+      .wfb-root {
+        display: flex;
+        height: 600px;
+        border: 1px solid var(--border, #e2e2e2);
+        border-radius: var(--wfb-radius);
+        overflow: hidden;
+        font-family: var(--font-sans, system-ui, sans-serif);
+        font-size: 13px;
+        color: var(--text, #1a1a1a);
+        background: var(--bg, #fff);
+      }
+      .wfb-sidebar {
+        width: var(--wfb-sidebar-w);
+        min-width: var(--wfb-sidebar-w);
+        border-right: 1px solid var(--border, #e2e2e2);
+        display: flex;
+        flex-direction: column;
+        background: var(--bg2, #f8f8f8);
+      }
+      .wfb-sidebar-header {
+        padding: 12px 12px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        border-bottom: 1px solid var(--border, #e2e2e2);
+      }
+      .wfb-sidebar-header h2 {
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--text2, #666);
+        margin: 0;
+      }
+      .wfb-search {
+        padding: 5px 8px;
+        border: 1px solid var(--border, #ddd);
+        border-radius: var(--wfb-radius-sm);
+        background: var(--bg, #fff);
+        font-size: 12px;
+        width: 100%;
+        outline: none;
+      }
+      .wfb-search:focus { border-color: var(--accent, #3b82f6); }
+      .wfb-workflow-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 4px;
+      }
+      .wfb-wf-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 8px;
+        border-radius: var(--wfb-radius-sm);
+        cursor: pointer;
+        transition: background .12s;
+      }
+      .wfb-wf-item:hover { background: var(--bg3, #eee); }
+      .wfb-wf-item.active { background: var(--accent-bg, #eff6ff); color: var(--accent, #2563eb); font-weight: 500; }
+      .wfb-wf-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+      .wfb-wf-actions { display: flex; gap: 2px; opacity: 0; transition: opacity .12s; }
+      .wfb-wf-item:hover .wfb-wf-actions,
+      .wfb-wf-item.active .wfb-wf-actions { opacity: 1; }
+      .wfb-icon-btn {
+        background: none;
+        border: none;
+        padding: 2px 4px;
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 13px;
+        color: var(--text2, #666);
+        line-height: 1;
+      }
+      .wfb-icon-btn:hover { background: var(--bg3, #ddd); color: var(--text, #111); }
+      .wfb-icon-btn.danger:hover { background: #fee2e2; color: #dc2626; }
+      .wfb-sidebar-footer {
+        padding: 8px;
+        border-top: 1px solid var(--border, #e2e2e2);
+        display: flex;
+        gap: 6px;
+      }
+      .wfb-main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .wfb-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border, #e2e2e2);
+        background: var(--bg, #fff);
+        flex-wrap: wrap;
+      }
+      .wfb-workflow-title {
+        flex: 1;
+        min-width: 120px;
+        font-size: 14px;
+        font-weight: 600;
+        border: none;
+        background: none;
+        padding: 2px 4px;
+        border-radius: 4px;
+        outline: none;
+        color: inherit;
+      }
+      .wfb-workflow-title:focus { background: var(--bg2, #f3f3f3); }
+      .wfb-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 11px;
+        border-radius: var(--wfb-radius-sm);
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        border: 1px solid transparent;
+        white-space: nowrap;
+        line-height: 1.4;
+      }
+      .wfb-btn:disabled { opacity: .45; cursor: not-allowed; }
+      .wfb-btn-primary { background: var(--accent, #2563eb); color: #fff; }
+      .wfb-btn-primary:hover:not(:disabled) { background: #1d4ed8; }
+      .wfb-btn-secondary { background: var(--bg2, #f3f3f3); color: var(--text, #222); border-color: var(--border, #ddd); }
+      .wfb-btn-secondary:hover:not(:disabled) { background: var(--bg3, #e8e8e8); }
+      .wfb-btn-danger { background: #dc2626; color: #fff; }
+      .wfb-btn-danger:hover:not(:disabled) { background: #b91c1c; }
+      .wfb-btn-ghost { background: none; border: none; color: var(--text2, #666); padding: 4px 6px; }
+      .wfb-btn-ghost:hover:not(:disabled) { color: var(--text); background: var(--bg2); }
+      .wfb-spacer { flex: 1; }
+      .wfb-canvas-wrap {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .wfb-empty-state {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: var(--text3, #aaa);
+        text-align: center;
+      }
+      .wfb-step {
+        display: grid;
+        grid-template-columns: 24px 1fr auto;
+        gap: 8px;
+        align-items: start;
+        background: var(--bg, #fff);
+        border: 1px solid var(--border, #e2e2e2);
+        border-radius: var(--wfb-radius);
+        padding: 10px 12px;
+        transition: box-shadow .15s, border-color .15s;
+      }
+      .wfb-step.drag-over { border-color: var(--accent, #3b82f6); box-shadow: 0 0 0 2px #bfdbfe; }
+      .wfb-drag-handle {
+        cursor: grab;
+        color: var(--text3, #ccc);
+        user-select: none;
+        font-size: 16px;
+        align-self: center;
+      }
+      .wfb-drag-handle:active { cursor: grabbing; }
+      .wfb-step-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+      .wfb-step-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .wfb-step-num {
+        font-size: 10px;
+        font-weight: 700;
+        background: var(--bg2, #f3f3f3);
+        color: var(--text2, #666);
+        border-radius: 4px;
+        padding: 1px 5px;
+      }
+      .wfb-step-msg {
+        font-size: 11px;
+        color: var(--text2, #888);
+        margin-top: 2px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 360px;
+      }
+      .wfb-step-msg.error { color: #dc2626; }
+      .wfb-step-actions { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+      .wfb-select {
+        padding: 4px 6px;
+        border: 1px solid var(--border, #ddd);
+        border-radius: var(--wfb-radius-sm);
+        background: var(--bg, #fff);
+        font-size: 12px;
+        cursor: pointer;
+        max-width: 160px;
+      }
+      .wfb-arrow {
+        text-align: center;
+        color: var(--text3, #ccc);
+        font-size: 16px;
+        line-height: 1;
+        margin: -4px 0;
+      }
+      .wfb-progress-wrap {
+        padding: 0 12px 8px;
+      }
+      .wfb-progress-bar-bg {
+        height: 4px;
+        border-radius: 2px;
+        background: var(--bg2, #eee);
+        overflow: hidden;
+      }
+      .wfb-progress-bar-fill {
+        height: 100%;
+        background: var(--accent, #2563eb);
+        border-radius: 2px;
+        transition: width .25s ease;
+      }
+      .wfb-output-panel {
+        border-top: 1px solid var(--border, #e2e2e2);
+        background: var(--bg2, #f8f8f8);
+        display: flex;
+        flex-direction: column;
+        max-height: 180px;
+      }
+      .wfb-output-header {
+        display: flex;
+        align-items: center;
+        padding: 6px 12px;
+        gap: 8px;
+        border-bottom: 1px solid var(--border, #e2e2e2);
+      }
+      .wfb-output-label { font-size: 11px; font-weight: 600; color: var(--text2, #888); text-transform: uppercase; letter-spacing: .05em; }
+      .wfb-output-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px 12px;
+        font-size: 12px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-break: break-all;
+        font-family: var(--font-mono, monospace);
+      }
+      .wfb-output-body.placeholder { color: var(--text3, #bbb); font-family: inherit; font-style: italic; }
+      .wfb-errors {
+        margin: 0 12px 8px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: var(--wfb-radius-sm);
+        padding: 8px 10px;
+        color: #dc2626;
+        font-size: 12px;
+      }
+      .wfb-sr-only {
+        position: absolute;
+        width: 1px; height: 1px;
+        padding: 0; margin: -1px;
+        overflow: hidden;
+        clip: rect(0,0,0,0);
+        white-space: nowrap;
+        border: 0;
+      }
+      @keyframes wfb-spin { to { transform: rotate(360deg); } }
+      .wfb-spinner {
+        display: inline-block;
+        width: 12px; height: 12px;
+        border: 2px solid var(--accent, #3b82f6);
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: wfb-spin .7s linear infinite;
+        vertical-align: middle;
+      }
+      .wfb-step.dragging { opacity: .4; }
+    `;
+    document.head.appendChild(styleEl);
+  }
+
+  // ======================== HELPER FUNCTIONS ========================
+  function el(tag, attrs = {}, text) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'style') e.style.cssText += v;
+      else e.setAttribute(k, v);
+    }
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function makeBtn(variant, label, onClick, title) {
+    const b = el('button', { class: `wfb-btn wfb-btn-${variant}`, type: 'button' });
+    b.innerHTML = label;
+    if (title) b.setAttribute('title', title);
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function makeIconBtn(icon, label, onClick, extraClass = '') {
+    const b = el('button', { class: `wfb-icon-btn ${extraClass}`, type: 'button', 'aria-label': label, title: label });
+    b.textContent = icon;
+    b.addEventListener('click', e => { e.stopPropagation(); onClick(); });
+    return b;
+  }
+
+  function flashBtn(btn, label, ms) {
+    const orig = btn.innerHTML;
+    btn.innerHTML = label;
+    btn.disabled = true;
+    setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, ms);
+  }
+
+  // ======================== STATE & UI ========================
+  let workflows = [];
+  let currentWorkflow = { name: 'নতুন ওয়ার্কফ্লো', steps: [] };
+  let running = false;
+  let abortController = null;
+  let searchQuery = '';
+  let dragSourceIdx = null;
+
+  const root = el('div', { class: 'wfb-root', role: 'application', 'aria-label': 'ওয়ার্কফ্লো বিল্ডার' });
+  container.appendChild(root);
+
+  const liveRegion = el('div', { 'aria-live': 'polite', 'aria-atomic': 'true', class: 'wfb-sr-only' });
+  root.appendChild(liveRegion);
+  function announce(msg) { liveRegion.textContent = ''; requestAnimationFrame(() => liveRegion.textContent = msg); }
+
+  // Sidebar
+  const sidebar = el('aside', { class: 'wfb-sidebar', role: 'navigation', 'aria-label': 'সেভ করা ওয়ার্কফ্লো' });
+  const main = el('main', { class: 'wfb-main' });
+  root.appendChild(sidebar);
+  root.appendChild(main);
+
+  // Sidebar header
+  const sidebarHeader = el('div', { class: 'wfb-sidebar-header' });
+  sidebarHeader.appendChild(el('h2', {}, 'ওয়ার্কফ্লো'));
+  const searchInput = el('input', { type: 'search', class: 'wfb-search', placeholder: '🔍 খুঁজুন…', 'aria-label': 'ওয়ার্কফ্লো খুঁজুন' });
+  searchInput.addEventListener('input', () => { searchQuery = searchInput.value.toLowerCase(); refreshList(); });
+  sidebarHeader.appendChild(searchInput);
+  sidebar.appendChild(sidebarHeader);
+
+  const wfList = el('ul', { class: 'wfb-workflow-list', role: 'list', 'aria-label': 'ওয়ার্কফ্লো তালিকা' });
+  sidebar.appendChild(wfList);
+
+  const sidebarFooter = el('div', { class: 'wfb-sidebar-footer' });
+  sidebarFooter.appendChild(makeBtn('primary', '+ নতুন', () => createNewWorkflow()));
+  sidebarFooter.appendChild(makeBtn('secondary', '⬆ Export', handleExport));
+  sidebarFooter.appendChild(makeBtn('secondary', '⬇ Import', handleImport));
+  sidebar.appendChild(sidebarFooter);
+
+  // Toolbar
+  const toolbar = el('div', { class: 'wfb-toolbar', role: 'toolbar', 'aria-label': 'ওয়ার্কফ্লো টুলবার' });
+  const titleInput = el('input', { type: 'text', class: 'wfb-workflow-title', placeholder: 'ওয়ার্কফ্লোর নাম…', 'aria-label': 'ওয়ার্কফ্লোর নাম', value: currentWorkflow.name });
+  titleInput.addEventListener('input', () => { currentWorkflow.name = titleInput.value; });
+  const btnSave = makeBtn('secondary', '💾 সেভ', handleSave, 'Ctrl+S');
+  const btnAddStep = makeBtn('secondary', '+ ধাপ যোগ করুন', addStep);
+  const spacer = el('div', { class: 'wfb-spacer' });
+  const btnAbort = makeBtn('danger', '⬛ বাতিল', handleAbort);
+  btnAbort.style.display = 'none';
+  const btnRun = makeBtn('primary', '▶ রান করুন', handleRun, 'Ctrl+Enter');
+  toolbar.appendChild(titleInput);
+  toolbar.appendChild(btnSave);
+  toolbar.appendChild(btnAddStep);
+  toolbar.appendChild(spacer);
+  toolbar.appendChild(btnAbort);
+  toolbar.appendChild(btnRun);
+  main.appendChild(toolbar);
+
+  // Errors panel
+  const errorsPanel = el('div', { class: 'wfb-errors', role: 'alert', 'aria-live': 'assertive' });
+  errorsPanel.style.display = 'none';
+  main.appendChild(errorsPanel);
+
+  // Progress bar
+  const progressWrap = el('div', { class: 'wfb-progress-wrap' });
+  const progressBg = el('div', { class: 'wfb-progress-bar-bg' });
+  const progressFill = el('div', { class: 'wfb-progress-bar-fill', style: 'width:0%' });
+  progressBg.appendChild(progressFill);
+  progressWrap.appendChild(progressBg);
+  progressWrap.style.display = 'none';
+  main.appendChild(progressWrap);
+
+  // Canvas
+  const canvas = el('div', { class: 'wfb-canvas-wrap', role: 'list', 'aria-label': 'ওয়ার্কফ্লো ধাপ' });
+  main.appendChild(canvas);
+
+  // Output panel
+  const outputPanel = el('div', { class: 'wfb-output-panel', 'aria-live': 'polite' });
+  const outputHeader = el('div', { class: 'wfb-output-header' });
+  outputHeader.appendChild(el('span', { class: 'wfb-output-label' }, 'আউটপুট'));
+  const btnCopyOutput = makeBtn('ghost', '📋 কপি', copyOutput);
+  btnCopyOutput.style.marginLeft = 'auto';
+  outputHeader.appendChild(btnCopyOutput);
+  const outputBody = el('div', { class: 'wfb-output-body placeholder', tabindex: '0', 'aria-label': 'আউটপুট এলাকা' }, 'এখানে রানের ফলাফল দেখাবে…');
+  outputPanel.appendChild(outputHeader);
+  outputPanel.appendChild(outputBody);
+  main.appendChild(outputPanel);
+
+  // Keyboard shortcuts
+  root.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleSave(); }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); handleRun(); }
+  });
+
+  // Storage change listener (cross-tab)
+  const unsub = onStorageChange(() => refreshList());
+
+  // ======================== CORE FUNCTIONS ========================
+  function refreshList() {
+    workflows = getAllWorkflows();
+    const filtered = searchQuery ? workflows.filter(w => w.name.toLowerCase().includes(searchQuery)) : workflows;
+    wfList.innerHTML = '';
+    if (filtered.length === 0) {
+      const empty = el('li', { style: 'padding:12px;text-align:center;color:var(--text3,#aaa);font-size:12px' },
+        searchQuery ? 'কোনো ওয়ার্কফ্লো পাওয়া যায়নি' : 'এখনো কোনো ওয়ার্কফ্লো নেই');
+      wfList.appendChild(empty);
+      return;
+    }
+    for (const wf of filtered) {
+      const li = el('li', { class: `wfb-wf-item${wf.id === currentWorkflow.id ? ' active' : ''}`, role: 'listitem' });
+      const nameSpan = el('span', { class: 'wfb-wf-name', title: wf.name }, wf.name);
+      nameSpan.addEventListener('click', () => loadWorkflow(wf));
+      const actions = el('span', { class: 'wfb-wf-actions', 'aria-label': 'ওয়ার্কফ্লো অ্যাকশন' });
+      const dupBtn = makeIconBtn('⧉', 'ডুপ্লিকেট', () => {
+        const copy = duplicateWorkflow(wf.id);
+        if (copy) { loadWorkflow(copy); refreshList(); announce(`"${copy.name}" তৈরি হয়েছে`); }
+      });
+      const delBtn = makeIconBtn('🗑', 'মুছে দিন', () => {
+        if (confirm(`"${wf.name}" মুছে দিতে চান?`)) {
+          deleteWorkflow(wf.id);
+          if (currentWorkflow.id === wf.id) createNewWorkflow();
+          refreshList();
+          announce(`"${wf.name}" মুছে দেওয়া হয়েছে`);
+        }
+      }, 'danger');
+      actions.appendChild(dupBtn);
+      actions.appendChild(delBtn);
+      li.appendChild(nameSpan);
+      li.appendChild(actions);
+      wfList.appendChild(li);
+    }
+  }
+
+  function createNewWorkflow() {
+    currentWorkflow = { name: 'নতুন ওয়ার্কফ্লো', steps: [] };
+    titleInput.value = currentWorkflow.name;
+    clearErrors();
+    resetOutput();
+    renderSteps();
+  }
+
+  function loadWorkflow(wf) {
+    currentWorkflow = { ...wf, steps: wf.steps.map(s => ({ ...s })) };
+    titleInput.value = currentWorkflow.name;
+    clearErrors();
+    resetOutput();
+    renderSteps();
+    refreshList();
+    announce(`"${currentWorkflow.name}" লোড হয়েছে`);
+  }
+
+  function handleSave() {
+    currentWorkflow.name = titleInput.value.trim() || 'নামহীন ওয়ার্কফ্লো';
+    titleInput.value = currentWorkflow.name;
+    try {
+      saveWorkflow(currentWorkflow);
+      refreshList();
+      flashBtn(btnSave, '✅ সেভ হয়েছে', 1500);
+      announce(`"${currentWorkflow.name}" সেভ হয়েছে`);
+    } catch (e) {
+      alert('সেভ করতে সমস্যা: ' + e.message);
+    }
+  }
+
+  function addStep() {
+    const tools = getAllTools();
+    const firstToolId = tools[0]?.id;
+    if (!firstToolId) { alert('কোনো টুল রেজিস্টার করা নেই। registerTool() ব্যবহার করুন।'); return; }
+    currentWorkflow.steps.push({ toolId: firstToolId, presetId: null });
+    renderSteps();
+    canvas.scrollTop = canvas.scrollHeight;
+  }
+
+  function removeStep(idx) {
+    currentWorkflow.steps.splice(idx, 1);
+    renderSteps();
+  }
+
+  function moveStep(fromIdx, toIdx) {
+    if (toIdx < 0 || toIdx >= currentWorkflow.steps.length) return;
+    const [moved] = currentWorkflow.steps.splice(fromIdx, 1);
+    currentWorkflow.steps.splice(toIdx, 0, moved);
+    renderSteps();
+  }
+
+  function renderSteps(stepStatuses = {}) {
+    canvas.innerHTML = '';
+    clearErrors();
+    const tools = getAllTools();
+    if (tools.length === 0) {
+      canvas.innerHTML = `<div class="wfb-empty-state"><div class="wfb-empty-icon">🔧</div><div>কোনো টুল রেজিস্টার করা নেই।</div><div class="wfb-empty-hint">registerTool() দিয়ে টুল যোগ করুন।</div></div>`;
+      return;
+    }
+    if (currentWorkflow.steps.length === 0) {
+      canvas.innerHTML = `<div class="wfb-empty-state"><div class="wfb-empty-icon">⚙️</div><div>এখনো কোনো ধাপ নেই</div><div class="wfb-empty-hint">"+ ধাপ যোগ করুন" বোতাম চাপুন</div></div>`;
+      return;
+    }
+    currentWorkflow.steps.forEach((step, idx) => {
+      const status = stepStatuses[idx] || {};
+      const stepCard = el('div', {
+        class: `wfb-step${status.status ? ` step-${status.status}` : ''}`,
+        role: 'listitem', 'aria-label': `ধাপ ${idx + 1}`,
+        draggable: 'true', 'data-idx': String(idx)
+      });
+      // Drag events
+      stepCard.addEventListener('dragstart', e => { dragSourceIdx = idx; stepCard.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+      stepCard.addEventListener('dragend', () => { stepCard.classList.remove('dragging'); document.querySelectorAll('.wfb-step.drag-over').forEach(c => c.classList.remove('drag-over')); dragSourceIdx = null; });
+      stepCard.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; stepCard.classList.add('drag-over'); });
+      stepCard.addEventListener('dragleave', () => stepCard.classList.remove('drag-over'));
+      stepCard.addEventListener('drop', e => { e.preventDefault(); stepCard.classList.remove('drag-over'); if (dragSourceIdx !== null && dragSourceIdx !== idx) moveStep(dragSourceIdx, idx); });
+      const handle = el('div', { class: 'wfb-drag-handle', title: 'টেনে সরান', 'aria-hidden': 'true' }, '⣿');
+      stepCard.appendChild(handle);
+      const body = el('div', { class: 'wfb-step-body' });
+      const row1 = el('div', { class: 'wfb-step-row' });
+      row1.appendChild(el('span', { class: 'wfb-step-num' }, `#${idx + 1}`));
+      const toolSel = el('select', { class: 'wfb-select', 'aria-label': `ধাপ ${idx + 1}: টুল নির্বাচন করুন` });
+      tools.forEach(t => {
+        const opt = el('option', { value: t.id }, `${t.icon || '🔧'} ${t.name}`);
+        if (t.id === step.toolId) opt.selected = true;
+        toolSel.appendChild(opt);
+      });
+      toolSel.addEventListener('change', () => {
+        currentWorkflow.steps[idx].toolId = toolSel.value;
+        currentWorkflow.steps[idx].presetId = null;
+        renderSteps(stepStatuses);
+      });
+      row1.appendChild(toolSel);
+      body.appendChild(row1);
+      const row2 = el('div', { class: 'wfb-step-row' });
+      const presets = getAllPresets(step.toolId);
+      const presetSel = el('select', { class: 'wfb-select', 'aria-label': `ধাপ ${idx + 1}: প্রিসেট নির্বাচন করুন` });
+      presetSel.appendChild(el('option', { value: '' }, '— প্রিসেট ছাড়া —'));
+      presets.forEach(p => {
+        const opt = el('option', { value: p.id }, p.name);
+        if (p.id === step.presetId) opt.selected = true;
+        presetSel.appendChild(opt);
+      });
+      presetSel.addEventListener('change', () => { currentWorkflow.steps[idx].presetId = presetSel.value || null; });
+      row2.appendChild(presetSel);
+      body.appendChild(row2);
+      if (status.status) {
+        const msgRow = el('div', { class: `wfb-step-msg${status.status === 'error' ? ' error' : ''}` });
+        if (status.status === 'running') msgRow.innerHTML = `<span class="wfb-spinner" aria-hidden="true"></span> চলছে…`;
+        else if (status.status === 'done') msgRow.textContent = `✅ সম্পন্ন (${status.durationMs}ms) — ${(status.output || '').slice(0, 60)}${(status.output || '').length > 60 ? '…' : ''}`;
+        else if (status.status === 'error') msgRow.textContent = `❌ ${status.error}`;
+        else if (status.status === 'skipped') msgRow.textContent = `⏭ এড়ানো হয়েছে`;
+        body.appendChild(msgRow);
+      }
+      stepCard.appendChild(body);
+      const actions = el('div', { class: 'wfb-step-actions' });
+      const upBtn = makeIconBtn('↑', 'উপরে যান', () => moveStep(idx, idx - 1));
+      upBtn.disabled = idx === 0;
+      const downBtn = makeIconBtn('↓', 'নিচে যান', () => moveStep(idx, idx + 1));
+      downBtn.disabled = idx === currentWorkflow.steps.length - 1;
+      const removeBtn = makeIconBtn('✕', 'ধাপ মুছুন', () => removeStep(idx), 'danger');
+      actions.appendChild(upBtn); actions.appendChild(downBtn); actions.appendChild(removeBtn);
+      stepCard.appendChild(actions);
+      canvas.appendChild(stepCard);
+      if (idx < currentWorkflow.steps.length - 1) canvas.appendChild(el('div', { class: 'wfb-arrow', 'aria-hidden': 'true' }, '↓'));
+    });
+  }
+
+  async function handleRun() {
+    if (running) return;
+    clearErrors();
+    const errors = validateWorkflow(currentWorkflow);
+    if (errors.length) {
+      errorsPanel.innerHTML = errors.map(e => `• ${e}`).join('<br>');
+      errorsPanel.style.display = '';
+      announce('ভ্যালিডেশন ব্যর্থ: ' + errors.join('; '));
+      return;
+    }
+    const inputText = prompt('প্রাথমিক ইনপুট টেক্সট লিখুন:');
+    if (inputText == null) return;
+    running = true;
+    abortController = new AbortController();
+    btnRun.disabled = true;
+    btnAbort.style.display = '';
+    progressWrap.style.display = '';
+    resetOutput();
+    announce('ওয়ার্কফ্লো চলছে…');
+    const total = currentWorkflow.steps.length;
+    const stepStatuses = {};
+    currentWorkflow.steps.forEach((_, i) => stepStatuses[i] = { status: 'pending' });
+    renderSteps(stepStatuses);
+    if (total > 0) { stepStatuses[0] = { status: 'running' }; renderSteps(stepStatuses); }
+    try {
+      const result = await runWorkflow(currentWorkflow, inputText, {
+        signal: abortController.signal,
+        retries: 1,
+        retryDelay: 400,
+        onProgress: (sr) => {
+          stepStatuses[sr.index] = sr;
+          if (sr.index + 1 < total && sr.status === 'done') stepStatuses[sr.index + 1] = { status: 'running' };
+          progressFill.style.width = `${Math.round(((sr.index + 1) / total) * 100)}%`;
+          renderSteps(stepStatuses);
+        },
+      });
+      progressFill.style.width = '100%';
+      renderSteps(stepStatuses);
+      if (result.aborted) {
+        setOutput('⬛ রান বাতিল করা হয়েছে।', true);
+        announce('রান বাতিল');
+      } else {
+        setOutput(result.finalOutput, false);
+        announce(`ওয়ার্কফ্লো সম্পন্ন। ${result.durationMs}ms`);
+      }
+    } catch (e) {
+      setOutput('❌ অপ্রত্যাশিত ত্রুটি: ' + e.message, true);
+    } finally {
+      running = false;
+      abortController = null;
+      btnRun.disabled = false;
+      btnAbort.style.display = 'none';
+      setTimeout(() => { progressWrap.style.display = 'none'; progressFill.style.width = '0%'; }, 1500);
+    }
+  }
+
+  function handleAbort() { abortController?.abort(); btnAbort.disabled = true; }
+
+  function setOutput(text, isError = false) {
+    outputBody.textContent = text;
+    outputBody.classList.remove('placeholder');
+    outputBody.style.color = isError ? 'var(--color-danger, #dc2626)' : '';
+  }
+  function resetOutput() {
+    outputBody.textContent = 'এখানে রানের ফলাফল দেখাবে…';
+    outputBody.classList.add('placeholder');
+    outputBody.style.color = '';
+  }
+  function copyOutput() {
+    const txt = outputBody.textContent;
+    if (!txt || outputBody.classList.contains('placeholder')) return;
+    navigator.clipboard.writeText(txt).then(() => flashBtn(btnCopyOutput, '✅ কপি হয়েছে', 1200)).catch(() => alert('কপি করতে পারেনি।'));
+  }
+  function showErrors(errors) { errorsPanel.innerHTML = errors.map(e => `• ${e}`).join('<br>'); errorsPanel.style.display = ''; }
+  function clearErrors() { errorsPanel.style.display = 'none'; errorsPanel.innerHTML = ''; }
+
+  function handleExport() {
+    const data = {
+      version: 1,
+      presets: JSON.parse(localStorage.getItem(STORAGE_PRESETS) || '{}'),
+      workflows: getAllWorkflows(),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'bangla-tools-config.json'; a.click();
+    URL.revokeObjectURL(url);
+  }
+  function handleImport() {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = '.json';
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (data.presets) localStorage.setItem(STORAGE_PRESETS, JSON.stringify(data.presets));
+        if (data.workflows) localStorage.setItem(STORAGE_WORKFLOWS, JSON.stringify(data.workflows));
+        refreshList();
+        alert('Import সম্পন্ন!');
+        announce('Import সম্পন্ন');
+      } catch (e) { alert('Import ত্রুটি: ' + e.message); }
+    });
+    input.click();
+  }
+
+  // Initialize
+  refreshList();
+  renderSteps();
+
+  // Return cleanup function if needed
+  return { cleanup: () => unsub() };
+}
+
+function renderTextDiff(container) {
+  let diffMode = 'word';
+  let viewMode = 'split';
+  let lastDiff = null;
+
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">🗂️</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Text Diff Viewer</p>
+        <p class="tool-header-desc">দুটো text তুলনা করো — পরিবর্তিত অংশ highlight হয়ে দেখাবে</p>
+      </div>
+    </div>
+    <div class="tool-body">
+      <div class="sample-row" id="diff-samples"></div>
+ 
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+        <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;">
+          ${['word', 'line', 'char'].map((m, i) => `
+            <button class="diff-tab${i === 0 ? ' active' : ''}" data-diff="${m}">
+              ${m === 'word' ? 'শব্দ' : m === 'line' ? 'লাইন' : 'অক্ষর'}
+            </button>`).join('')}
+        </div>
+        <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;">
+          ${['split', 'inline'].map((v, i) => `
+            <button class="diff-tab${i === 0 ? ' active' : ''}" data-view="${v}">
+              ${v === 'split' ? 'Side-by-side' : 'Inline'}
+            </button>`).join('')}
+        </div>
+        <div id="diff-stats-bar" style="margin-left:auto;display:none;font-size:12px;
+          font-family:var(--font-mono);display:flex;gap:12px;"></div>
+      </div>
+ 
+      <div class="io-grid" id="diff-inputs">
+        <div class="io-pane">
+          <span class="io-label">পুরনো text (Original)</span>
+          <textarea id="diff-old" placeholder="পুরনো বা মূল text…" style="min-height:160px;"></textarea>
+        </div>
+        <div class="io-pane">
+          <span class="io-label">নতুন text (Modified)</span>
+          <textarea id="diff-new" placeholder="নতুন বা সংশোধিত text…" style="min-height:160px;"></textarea>
+        </div>
+      </div>
+ 
+      <div class="btn-row">
+        <button class="btn btn-primary" id="diff-run">⚡ Compare করো</button>
+        <button class="btn btn-ghost"   id="diff-clear">✕ Clear</button>
+      </div>
+ 
+      <div id="diff-output" style="margin-top:16px;display:none;"></div>
+    </div>
+  `;
+
+  const style = document.createElement('style');
+  style.textContent = `
+    .diff-tab { padding:6px 14px;font-size:12.5px;font-family:var(--font-ui);
+      background:transparent;border:none;color:var(--text2);cursor:pointer;
+      transition:all var(--trans);border-right:1px solid var(--border); }
+    .diff-tab:last-child { border-right:none; }
+    .diff-tab.active { background:var(--accent-dim);color:var(--accent2);font-weight:500; }
+    .diff-tab:hover:not(.active) { background:var(--surface2); }
+    .diff-pane { background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);
+      padding:14px 16px;font-family:var(--font-bangla);font-size:14px;line-height:1.9;
+      min-height:100px;word-break:break-word;white-space:pre-wrap; }
+    ins.diff-ins { background:rgba(52,211,153,.2);color:#34d399;text-decoration:none;
+      border-radius:2px;padding:0 1px; }
+    del.diff-del { background:rgba(248,113,113,.2);color:#f87171;text-decoration:line-through;
+      border-radius:2px;padding:0 1px; }
+    .diff-stat-added   { color:#34d399; }
+    .diff-stat-removed { color:#f87171; }
+    .diff-stat-same    { color:var(--text3); }
+    .diff-similarity { background:var(--accent-dim);color:var(--accent2);
+      padding:2px 10px;border-radius:20px;font-weight:500; }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+
+  // Samples
+  const samplesEl = el.querySelector('#diff-samples');
+  diffSamples.forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'sample-chip';
+    chip.textContent = s.label;
+    chip.addEventListener('click', () => {
+      el.querySelector('#diff-old').value = s.old;
+      el.querySelector('#diff-new').value = s.new;
+      doCompare();
+    });
+    samplesEl.appendChild(chip);
+  });
+
+  el.querySelectorAll('[data-diff]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      diffMode = btn.dataset.diff;
+      el.querySelectorAll('[data-diff]').forEach(b => b.classList.toggle('active', b.dataset.diff === diffMode));
+      doCompare();
+    });
+  });
+
+  el.querySelectorAll('[data-view]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      viewMode = btn.dataset.view;
+      el.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === viewMode));
+      renderOutput();
+    });
+  });
+
+  el.querySelector('#diff-run').addEventListener('click', doCompare);
+  el.querySelector('#diff-clear').addEventListener('click', () => {
+    el.querySelector('#diff-old').value = '';
+    el.querySelector('#diff-new').value = '';
+    el.querySelector('#diff-output').style.display = 'none';
+    el.querySelector('#diff-stats-bar').style.display = 'none';
+  });
+
+  function doCompare() {
+    const oldText = el.querySelector('#diff-old').value;
+    const newText = el.querySelector('#diff-new').value;
+    if (!oldText && !newText) return;
+    lastDiff = diffTexts(oldText, newText, diffMode);
+    renderOutput();
+    const stats = getDiffStats(lastDiff);
+    const bar = el.querySelector('#diff-stats-bar');
+    bar.style.display = 'flex';
+    bar.innerHTML = `
+      <span class="diff-stat-added">+${stats.addedTokens} added</span>
+      <span class="diff-stat-removed">-${stats.removedTokens} removed</span>
+      <span class="diff-stat-same">${stats.equalTokens} same</span>
+      <span class="diff-similarity">${stats.similarity}% similar</span>
+    `;
+  }
+
+  function renderOutput() {
+    if (!lastDiff) return;
+    const out = el.querySelector('#diff-output');
+    out.style.display = 'block';
+    if (viewMode === 'split') {
+      out.innerHTML = `
+        <div class="io-grid">
+          <div class="io-pane">
+            <span class="io-label" style="color:#f87171;">🔴 মুছে গেছে</span>
+            <div class="diff-pane">${renderOldSide(lastDiff)}</div>
+          </div>
+          <div class="io-pane">
+            <span class="io-label" style="color:#34d399;">🟢 যোগ হয়েছে</span>
+            <div class="diff-pane">${renderNewSide(lastDiff)}</div>
+          </div>
+        </div>`;
+    } else {
+      out.innerHTML = `
+        <p class="io-label" style="margin-bottom:8px;">Inline view — <span style="color:#34d399;">সবুজ = নতুন</span>, <span style="color:#f87171;">লাল = মুছে গেছে</span></p>
+        <div class="diff-pane">${renderInlineDiff(lastDiff, diffMode)}</div>`;
+    }
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Text Extractor
+// ═══════════════════════════════════════════════════════════════════
+
+function renderTextExtractor(container) {
+  let activePatterns = new Set(['url', 'email', 'phone_bd', 'hashtag']);
+  let customRegex = '';
+  let extractUnique = true;
+
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">📋</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Text Extractor</p>
+        <p class="tool-header-desc">URL · email · phone · date · hashtag — text থেকে বের করো</p>
+      </div>
+    </div>
+    <div class="tool-body">
+      <div class="sample-row" id="ex-samples"></div>
+ 
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;" id="ex-pattern-btns"></div>
+ 
+      <textarea id="ex-input" placeholder="এখানে text paste করুন…" style="min-height:140px;margin-bottom:12px;"></textarea>
+ 
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+        <input id="ex-custom-regex" type="text" placeholder="Custom regex pattern… (e.g. \\d{4})"
+          style="flex:1;min-width:180px;padding:8px 12px;background:var(--bg3);border:1px solid var(--border);
+          border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-mono);font-size:13px;outline:none;">
+        <button class="btn btn-ghost btn-sm" id="ex-custom-run">Custom Extract</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);
+          cursor:pointer;margin-left:auto;">
+          <input type="checkbox" id="ex-unique" checked style="accent-color:var(--accent);">
+          Unique only
+        </label>
+      </div>
+ 
+      <div class="btn-row" style="margin-bottom:14px;">
+        <button class="btn btn-primary" id="ex-run">📋 Extract করো</button>
+        <button class="btn btn-ghost"   id="ex-clear">✕ Clear</button>
+        <button class="btn btn-ghost"   id="ex-all">সব Extract করো</button>
+      </div>
+ 
+      <div id="ex-results"></div>
+    </div>
+  `;
+
+  const style = document.createElement('style');
+  style.textContent = `
+    .ex-pat-btn { padding:5px 12px;border:1px solid var(--border);border-radius:20px;
+      background:var(--surface2);color:var(--text2);font-size:12px;cursor:pointer;
+      font-family:var(--font-ui);transition:all var(--trans); }
+    .ex-pat-btn.active { background:var(--accent-dim);border-color:var(--accent);color:var(--accent2); }
+    .ex-pat-btn:hover:not(.active) { border-color:var(--border2);color:var(--text); }
+    .ex-result-section { margin-bottom:12px; }
+    .ex-result-header { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
+    .ex-result-title { font-size:12px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.05em; }
+    .ex-result-count { font-size:11px;padding:2px 8px;border-radius:20px;
+      background:var(--accent-dim);color:var(--accent2);font-family:var(--font-mono); }
+    .ex-copy-all-btn { font-size:11px;padding:3px 10px;border:1px solid var(--border);
+      border-radius:var(--radius-sm);background:transparent;color:var(--text3);cursor:pointer;
+      margin-left:auto;font-family:var(--font-ui);transition:all var(--trans); }
+    .ex-copy-all-btn:hover { color:var(--text);border-color:var(--border2); }
+    .ex-items-wrap { display:flex;flex-wrap:wrap;gap:5px; }
+    .ex-item-chip { padding:4px 12px;background:var(--bg3);border:1px solid var(--border);
+      border-radius:var(--radius-sm);font-size:12.5px;color:var(--text);cursor:pointer;
+      font-family:var(--font-mono);transition:all var(--trans);max-width:300px;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+    .ex-item-chip:hover { border-color:var(--accent);color:var(--accent2); }
+    .ex-empty { font-size:13px;color:var(--text3);padding:12px;text-align:center;
+      background:var(--bg3);border-radius:var(--radius);border:1px solid var(--border); }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+
+  // Pattern buttons
+  const patBtns = el.querySelector('#ex-pattern-btns');
+  Object.entries(PATTERNS).forEach(([key, pat]) => {
+    const btn = document.createElement('button');
+    btn.className = 'ex-pat-btn' + (activePatterns.has(key) ? ' active' : '');
+    btn.innerHTML = `${pat.icon} ${pat.label}`;
+    btn.addEventListener('click', () => {
+      if (activePatterns.has(key)) activePatterns.delete(key);
+      else activePatterns.add(key);
+      btn.classList.toggle('active', activePatterns.has(key));
+      doExtract();
+    });
+    patBtns.appendChild(btn);
+  });
+
+  // Samples
+  const samplesEl = el.querySelector('#ex-samples');
+  exSamples.forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'sample-chip';
+    chip.textContent = s.label;
+    chip.addEventListener('click', () => { inputEl.value = s.text; doExtract(); });
+    samplesEl.appendChild(chip);
+  });
+
+  const inputEl = el.querySelector('#ex-input');
+  el.querySelector('#ex-unique').addEventListener('change', e => { extractUnique = e.target.checked; doExtract(); });
+  inputEl.addEventListener('input', doExtract);
+  el.querySelector('#ex-run').addEventListener('click', doExtract);
+  el.querySelector('#ex-clear').addEventListener('click', () => {
+    inputEl.value = '';
+    el.querySelector('#ex-results').innerHTML = '';
+  });
+  el.querySelector('#ex-all').addEventListener('click', () => {
+    Object.keys(PATTERNS).forEach(k => activePatterns.add(k));
+    patBtns.querySelectorAll('.ex-pat-btn').forEach(b => b.classList.add('active'));
+    doExtract();
+  });
+  el.querySelector('#ex-custom-run').addEventListener('click', () => {
+    const pattern = el.querySelector('#ex-custom-regex').value.trim();
+    if (!pattern) return;
+    const { items, unique, count, error } = extractCustom(inputEl.value, pattern);
+    const results = el.querySelector('#ex-results');
+    if (error) {
+      results.innerHTML = `<p style="color:var(--red);font-size:13px;">${error}</p>`;
+      return;
+    }
+    const display = extractUnique ? unique : items;
+    renderSection(results, 'Custom Pattern', '🎯', display, true);
+  });
+
+  function doExtract() {
+    const text = inputEl.value;
+    const resultsEl = el.querySelector('#ex-results');
+    if (!text.trim()) { resultsEl.innerHTML = ''; return; }
+
+    resultsEl.innerHTML = '';
+    let anyFound = false;
+
+    activePatterns.forEach(key => {
+      const { items, unique } = extract(text, key);
+      const display = extractUnique ? unique : items;
+      if (display.length > 0) {
+        anyFound = true;
+        const pat = PATTERNS[key];
+        renderSection(resultsEl, pat.label, pat.icon, display, false);
+      }
+    });
+
+    if (!anyFound && activePatterns.size > 0) {
+      resultsEl.innerHTML = `<div class="ex-empty">নির্বাচিত pattern এ কিছু পাওয়া যায়নি।</div>`;
+    }
+  }
+
+  function renderSection(container2, label, icon, items, append) {
+    const section = document.createElement('div');
+    section.className = 'ex-result-section';
+    section.innerHTML = `
+      <div class="ex-result-header">
+        <span>${icon}</span>
+        <span class="ex-result-title">${label}</span>
+        <span class="ex-result-count">${items.length}টি</span>
+        <button class="ex-copy-all-btn" onclick="navigator.clipboard.writeText(${JSON.stringify(items.join('\n'))})">সব Copy</button>
+      </div>
+      <div class="ex-items-wrap">
+        ${items.map(item => `
+          <button class="ex-item-chip" onclick="navigator.clipboard.writeText('${item.replace(/'/g, "\\'")}').then(()=>showToast('Copied!'))"
+            title="${item}">${item}</button>`).join('')}
+      </div>
+    `;
+    if (append) container2.appendChild(section);
+    else container2.appendChild(section);
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Unicode Inspector
+// ═══════════════════════════════════════════════════════════════════
+
+function renderUnicodeInspector(container) {
+  let showAll = false;
+
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">🔐</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Unicode Inspector</p>
+        <p class="tool-header-desc">প্রতিটি character এর Unicode code point, block, UTF-8 bytes — সব দেখো</p>
+      </div>
+    </div>
+    <div class="tool-body">
+      <div class="sample-row" id="uni-samples"></div>
+      <textarea id="uni-input" placeholder="Inspect করতে চাওয়া text এখানে দাও…" style="min-height:100px;margin-bottom:12px;"></textarea>
+ 
+      <div id="uni-stats" style="display:none;margin-bottom:14px;
+        display:none;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);
+        border-radius:var(--radius);font-size:12.5px;display:flex;gap:16px;flex-wrap:wrap;"></div>
+ 
+      <div id="uni-grid" style="display:flex;flex-wrap:wrap;gap:5px;"></div>
+ 
+      <div id="uni-detail" style="display:none;margin-top:14px;"></div>
+    </div>
+  `;
+
+  const style = document.createElement('style');
+  style.textContent = `
+    .uni-chip { display:flex;flex-direction:column;align-items:center;gap:2px;
+      background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);
+      padding:6px 8px;min-width:42px;cursor:pointer;transition:all var(--trans);position:relative; }
+    .uni-chip:hover { border-color:var(--accent);background:var(--accent-dim);transform:translateY(-1px); }
+    .uni-chip.is-bengali { border-color:#34d39940; }
+    .uni-chip.is-invisible { border-color:#fbbf2450;background:var(--amber-dim); }
+    .uni-chip.is-danger { border-color:#f8717160;background:var(--red-dim); }
+    .uni-chip.is-emoji { border-color:#a78bfa50; }
+    .uni-char { font-family:var(--font-bangla);font-size:18px;line-height:1.2; }
+    .uni-code { font-family:var(--font-mono);font-size:9px;color:var(--text3);margin-top:1px; }
+    .uni-stat-item { display:flex;flex-direction:column;gap:2px; }
+    .uni-stat-label { font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em; }
+    .uni-stat-val { font-size:15px;font-weight:600;font-family:var(--font-mono);color:var(--text); }
+    .uni-detail-card { background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px; }
+    .uni-detail-grid { display:grid;grid-template-columns:130px 1fr;gap:4px 12px;font-size:13px; }
+    .uni-detail-key { color:var(--text3); }
+    .uni-detail-val { color:var(--text);font-family:var(--font-mono);word-break:break-all; }
+    .uni-byte-chip { display:inline-block;padding:2px 8px;background:var(--accent-dim);
+      color:var(--accent2);border-radius:4px;font-family:var(--font-mono);font-size:12px;margin:2px; }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+
+  // Samples
+  const samplesEl = el.querySelector('#uni-samples');
+  uniSamples.forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'sample-chip';
+    chip.textContent = s.label;
+    chip.addEventListener('click', () => { inputEl.value = s.text; doInspect(); });
+    samplesEl.appendChild(chip);
+  });
+
+  const inputEl = el.querySelector('#uni-input');
+  inputEl.addEventListener('input', doInspect);
+
+  function doInspect() {
+    const text = inputEl.value;
+    const gridEl = el.querySelector('#uni-grid');
+    const statsEl = el.querySelector('#uni-stats');
+    const detailEl = el.querySelector('#uni-detail');
+    if (!text) { gridEl.innerHTML = ''; statsEl.style.display = 'none'; detailEl.style.display = 'none'; return; }
+
+    const chars = inspectText(text, 300);
+    const stats = getInspectorStats(chars);
+
+    statsEl.style.display = 'flex';
+    statsEl.innerHTML = [
+      ['মোট', stats.total],
+      ['বাংলা', stats.bengali],
+      ['Latin', stats.latin],
+      ['Invisible', stats.invisible],
+      ['Emoji', stats.emoji],
+      ['Scripts', stats.scripts.filter(s => s !== 'Common').join(', ') || '—'],
+    ].map(([l, v]) => `
+      <div class="uni-stat-item">
+        <span class="uni-stat-label">${l}</span>
+        <span class="uni-stat-val" style="${l === 'Invisible' && v > 0 ? 'color:var(--amber)' : ''}">${v}</span>
+      </div>`).join('');
+
+    gridEl.innerHTML = '';
+    chars.forEach(ch => {
+      const chip = document.createElement('div');
+      chip.className = [
+        'uni-chip',
+        ch.isBengali ? 'is-bengali' : '',
+        ch.isInvisible && ch.danger === 'high' ? 'is-danger' :
+          ch.isInvisible ? 'is-invisible' : '',
+        ch.isEmoji ? 'is-emoji' : '',
+      ].filter(Boolean).join(' ');
+
+      chip.innerHTML = `
+        <span class="uni-char">${ch.display}</span>
+        <span class="uni-code">${ch.codePointHex}</span>
+      `;
+      chip.title = ch.name;
+      chip.addEventListener('click', () => showDetail(ch, detailEl));
+      gridEl.appendChild(chip);
+    });
+
+    if (text.length > 300) {
+      const note = document.createElement('p');
+      note.style.cssText = 'font-size:12px;color:var(--text3);margin-top:8px;width:100%;';
+      note.textContent = `প্রথম ৩০০ character দেখানো হচ্ছে (মোট ${[...text].length}টি)।`;
+      gridEl.appendChild(note);
+    }
+  }
+
+  function showDetail(ch, detailEl) {
+    detailEl.style.display = 'block';
+    detailEl.innerHTML = `
+      <div class="uni-detail-card">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <span style="font-family:var(--font-bangla);font-size:36px;line-height:1;">${ch.display}</span>
+          <div>
+            <p style="font-size:16px;font-weight:500;color:var(--text);">${ch.name}</p>
+            <p style="font-size:12px;color:var(--text3);">${ch.category} · ${ch.block}</p>
+          </div>
+          <button class="btn btn-ghost btn-sm" style="margin-left:auto;"
+            onclick="navigator.clipboard.writeText('${ch.grapheme}').then(()=>showToast('Copied!'))">Copy char</button>
+        </div>
+        <div class="uni-detail-grid">
+          <span class="uni-detail-key">Code Point</span>
+          <span class="uni-detail-val">${ch.codePointHex} (decimal: ${ch.decimal})</span>
+          <span class="uni-detail-key">Block</span>
+          <span class="uni-detail-val">${ch.block}</span>
+          <span class="uni-detail-key">Script</span>
+          <span class="uni-detail-val">${ch.script}</span>
+          <span class="uni-detail-key">Category</span>
+          <span class="uni-detail-val">${ch.category}</span>
+          <span class="uni-detail-key">UTF-8 Bytes</span>
+          <span class="uni-detail-val">${ch.utf8Bytes.map(b => `<span class="uni-byte-chip">${b}</span>`).join('')}</span>
+          <span class="uni-detail-key">UTF-16</span>
+          <span class="uni-detail-val">${ch.utf16Units.join(', ')}</span>
+          <span class="uni-detail-key">JS .length</span>
+          <span class="uni-detail-val">${ch.jsLength} (code unit${ch.jsLength > 1 ? 's — surrogate pair' : ''})</span>
+          ${ch.bengaliInfo ? `
+          <span class="uni-detail-key">বাংলা তথ্য</span>
+          <span class="uni-detail-val">${ch.bengaliInfo.category} — ${ch.bengaliInfo.label}</span>` : ''}
+          ${ch.isInvisible ? `
+          <span class="uni-detail-key">⚠️ সতর্কতা</span>
+          <span class="uni-detail-val" style="color:var(--amber);">${ch.invisibleInfo.name} — এটি অদৃশ্য character, display সমস্যা করতে পারে</span>` : ''}
+        </div>
+      </div>`;
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Base64 Encoder
+// ═══════════════════════════════════════════════════════════════════
+
+function renderBase64Encoder(container) {
+  let activeMode = 'base64';
+  let direction = 'encode'; // 'encode' | 'decode'
+
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">📦</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Base64 / Encoder</p>
+        <p class="tool-header-desc">Base64 · Hex · URL · HTML Entity · Binary — encode ও decode</p>
+      </div>
+    </div>
+    <div class="tool-body">
+      <div class="sample-row" id="b64-samples"></div>
+ 
+      <!-- Mode selector -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:7px;margin-bottom:12px;" id="b64-modes"></div>
+ 
+      <!-- Direction toggle -->
+      <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);
+        overflow:hidden;margin-bottom:14px;width:fit-content;">
+        <button class="b64-dir active" data-dir="encode">Encode →</button>
+        <button class="b64-dir" data-dir="decode">← Decode</button>
+      </div>
+ 
+      <div class="io-grid">
+        <div class="io-pane">
+          <span class="io-label" id="b64-in-label">Input (Text)</span>
+          <textarea id="b64-input" placeholder="এখানে text লিখুন…" style="min-height:140px;"></textarea>
+        </div>
+        <div class="io-pane">
+          <span class="io-label" id="b64-out-label">Output (Encoded)</span>
+          <textarea id="b64-output" readonly placeholder="ফলাফল এখানে…" style="min-height:140px;font-family:var(--font-mono);font-size:13px;"></textarea>
+        </div>
+      </div>
+ 
+      <div id="b64-error" style="display:none;padding:8px 12px;background:var(--red-dim);
+        border:1px solid #f8717150;border-radius:var(--radius-sm);font-size:13px;
+        color:var(--red);margin-top:8px;"></div>
+ 
+      <div class="btn-row">
+        <button class="btn btn-primary" id="b64-run">⚡ Run</button>
+        <button class="btn btn-ghost"   id="b64-copy">⎘ Copy</button>
+        <button class="btn btn-ghost"   id="b64-swap">⇄ Swap</button>
+        <button class="btn btn-ghost"   id="b64-clear">✕ Clear</button>
+        <span id="b64-stats" style="font-size:11.5px;color:var(--text3);margin-left:auto;font-family:var(--font-mono);"></span>
+      </div>
+    </div>
+  `;
+
+  const style = document.createElement('style');
+  style.textContent = `
+    .b64-mode-btn { padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);
+      background:var(--bg3);color:var(--text2);cursor:pointer;font-family:var(--font-ui);
+      font-size:12.5px;transition:all var(--trans);display:flex;flex-direction:column;gap:2px;text-align:left; }
+    .b64-mode-btn.active { border-color:var(--accent);background:var(--accent-dim);color:var(--accent2); }
+    .b64-mode-btn:hover:not(.active) { border-color:var(--border2);color:var(--text); }
+    .b64-mode-icon { font-size:16px; }
+    .b64-mode-label { font-size:12.5px;font-weight:500; }
+    .b64-mode-desc  { font-size:10.5px;color:var(--text3);line-height:1.3; }
+    .b64-mode-btn.active .b64-mode-desc { color:var(--accent2);opacity:.7; }
+    .b64-dir { padding:7px 16px;font-size:13px;font-family:var(--font-ui);
+      background:transparent;border:none;color:var(--text2);cursor:pointer;
+      transition:all var(--trans);border-right:1px solid var(--border); }
+    .b64-dir:last-child { border-right:none; }
+    .b64-dir.active { background:var(--accent-dim);color:var(--accent2);font-weight:500; }
+    .b64-dir:hover:not(.active) { background:var(--surface2); }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+
+  // Samples
+  const samplesEl = el.querySelector('#b64-samples');
+  b64Samples.forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'sample-chip';
+    chip.textContent = s.label;
+    chip.addEventListener('click', () => { inputEl.value = s.text; doRun(); });
+    samplesEl.appendChild(chip);
+  });
+
+  // Mode buttons
+  const modesEl = el.querySelector('#b64-modes');
+  Object.entries(encodeModes).forEach(([key, mode]) => {
+    const btn = document.createElement('button');
+    btn.className = 'b64-mode-btn' + (key === activeMode ? ' active' : '');
+    btn.innerHTML = `
+      <span class="b64-mode-icon">${mode.icon}</span>
+      <span class="b64-mode-label">${mode.label}</span>
+      <span class="b64-mode-desc">${mode.desc}</span>`;
+    btn.addEventListener('click', () => {
+      activeMode = key;
+      modesEl.querySelectorAll('.b64-mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      doRun();
+    });
+    modesEl.appendChild(btn);
+  });
+
+  // Direction
+  el.querySelectorAll('.b64-dir').forEach(btn => {
+    btn.addEventListener('click', () => {
+      direction = btn.dataset.dir;
+      el.querySelectorAll('.b64-dir').forEach(b => b.classList.toggle('active', b.dataset.dir === direction));
+      el.querySelector('#b64-in-label').textContent = direction === 'encode' ? 'Input (Text)' : 'Input (Encoded)';
+      el.querySelector('#b64-out-label').textContent = direction === 'encode' ? 'Output (Encoded)' : 'Output (Text)';
+      doRun();
+    });
+  });
+
+  const inputEl = el.querySelector('#b64-input');
+  const outputEl = el.querySelector('#b64-output');
+  const errorEl = el.querySelector('#b64-error');
+
+  inputEl.addEventListener('input', doRun);
+  el.querySelector('#b64-run').addEventListener('click', doRun);
+  el.querySelector('#b64-copy').addEventListener('click', () => copyText(outputEl.value));
+  el.querySelector('#b64-clear').addEventListener('click', () => {
+    inputEl.value = ''; outputEl.value = '';
+    errorEl.style.display = 'none';
+    el.querySelector('#b64-stats').textContent = '';
+  });
+  el.querySelector('#b64-swap').addEventListener('click', () => {
+    const tmp = inputEl.value;
+    inputEl.value = outputEl.value;
+    outputEl.value = '';
+    direction = direction === 'encode' ? 'decode' : 'encode';
+    el.querySelectorAll('.b64-dir').forEach(b => b.classList.toggle('active', b.dataset.dir === direction));
+    el.querySelector('#b64-in-label').textContent = direction === 'encode' ? 'Input (Text)' : 'Input (Encoded)';
+    el.querySelector('#b64-out-label').textContent = direction === 'encode' ? 'Output (Encoded)' : 'Output (Text)';
+    doRun();
+  });
+
+  function doRun() {
+    const text = inputEl.value;
+    if (!text) { outputEl.value = ''; errorEl.style.display = 'none'; return; }
+
+    const mode = encodeModes[activeMode];
+    const { result, error } = direction === 'encode'
+      ? mode.encode(text)
+      : mode.decode(text);
+
+    errorEl.style.display = error ? 'block' : 'none';
+    if (error) { errorEl.textContent = error; outputEl.value = ''; return; }
+
+    outputEl.value = result;
+    const stats = getEncodingStats(text, result, activeMode);
+    el.querySelector('#b64-stats').textContent = direction === 'encode'
+      ? `${stats.origBytes}B → ${stats.encBytes}B (+${stats.overhead}% overhead)`
+      : `${text.length} chars decoded`;
   }
 }
 
