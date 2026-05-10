@@ -25,6 +25,7 @@ import { CONVERSION_TYPES, batchProcess, getStats, SAMPLES as batchSamples, CUST
 import { findMatches, replaceText, batchReplace, buildHighlightedHtml, SAMPLES as frSamples } from './tools/find-replace.js';
 import { generateLoremBangla, THEMES as loremThemes, PRESETS as loremPresets } from './tools/lorem-bangla.js';
 import { fixPunctuation, fixWithPreset, FIXES, PRESETS as punctPresets, CATEGORIES as punctCats, SAMPLES as punctSamples } from './tools/punctuation-fixer.js';
+import {BANGLA_FONTS, LATIN_FONTS, ALL_FONTS,SAMPLE_TEXTS, loadFont, loadAllFonts, isFontLoaded,} from './tools/font-previewer.js';
 
 // ─── Tool Definitions ───────────────────────────────────────────────────────
 const TOOLS = [
@@ -212,6 +213,15 @@ const TOOLS = [
    category: 'writing',
    desc: 'বাংলা দাঁড়ি, comma, quotes সঠিক করো',
   },
+  {
+   id: 'font-previewer',
+   name: 'Font Previewer',
+   icon: '🎨',
+   tag: 'unicode',
+   category: 'utility',
+   desc: 'বাংলা ও Latin font preview ও compare করো',
+   badge: 'NEW',
+ },
 
 ];
 
@@ -341,6 +351,7 @@ function renderTool(id) {
   else if (id === 'find-replace')       renderFindReplace(view);
   else if (id === 'lorem-bangla')       renderLoremBangla(view);
   else if (id === 'punctuation-fixer')  renderPunctuationFixer(view);
+  else if (id === 'font-previewer') renderFontPreviewer(view);
   else view.innerHTML = `<p>Tool not found.</p>`;
 }
 
@@ -3963,6 +3974,453 @@ function renderPunctuationFixer(container) {
       changesEl.style.display = 'none';
     }
   }
+}
+
+function renderFontPreviewer(container) {
+  // ── State ──
+  let previewText    = SAMPLE_TEXTS.bangla[0].text;
+  let fontSize       = 24;
+  let fontWeight     = 400;
+  let lineHeight     = 1.8;
+  let letterSpacing  = 0;
+  let darkBg         = false;
+  let compareMode    = false;
+  let activeCategory = 'bangla'; // 'bangla' | 'latin' | 'all'
+  let selectedFonts  = new Set(); // for compare mode
+  let loadingFonts   = new Set();
+ 
+  // ── Outer card ──
+  const el = document.createElement('div');
+  el.className = 'tool-card';
+  el.innerHTML = `
+    <div class="tool-header">
+      <div class="tool-header-icon">🎨</div>
+      <div class="tool-header-info">
+        <p class="tool-header-title">Font Previewer</p>
+        <p class="tool-header-desc">বাংলা ও Latin font preview করো — compare, customize, copy CSS</p>
+      </div>
+    </div>
+    <div class="tool-body">
+ 
+      <!-- Sample text picker -->
+      <div style="margin-bottom:12px;">
+        <p style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px;">Sample Text</p>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;" id="fp-samples"></div>
+      </div>
+ 
+      <!-- Custom text input -->
+      <textarea id="fp-custom-text"
+        placeholder="নিজের text লিখুন — সব font এ একসাথে দেখাবে…"
+        style="min-height:70px;margin-bottom:14px;font-size:15px;"></textarea>
+ 
+      <!-- Controls row -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;
+        padding:14px;background:var(--bg3);border:1px solid var(--border);
+        border-radius:var(--radius);margin-bottom:14px;" id="fp-controls">
+ 
+        <div class="fp-ctrl-group">
+          <label class="fp-ctrl-label">Size: <span id="fp-size-val">24px</span></label>
+          <input type="range" id="fp-size" min="12" max="72" value="24"
+            style="width:100%;accent-color:var(--accent);">
+        </div>
+        <div class="fp-ctrl-group">
+          <label class="fp-ctrl-label">Weight: <span id="fp-weight-val">400</span></label>
+          <input type="range" id="fp-weight" min="100" max="900" step="100" value="400"
+            style="width:100%;accent-color:var(--accent);">
+        </div>
+        <div class="fp-ctrl-group">
+          <label class="fp-ctrl-label">Line Height: <span id="fp-lh-val">1.8</span></label>
+          <input type="range" id="fp-lh" min="1" max="3" step="0.1" value="1.8"
+            style="width:100%;accent-color:var(--accent);">
+        </div>
+        <div class="fp-ctrl-group">
+          <label class="fp-ctrl-label">Letter Spacing: <span id="fp-ls-val">0px</span></label>
+          <input type="range" id="fp-ls" min="-2" max="8" step="0.5" value="0"
+            style="width:100%;accent-color:var(--accent);">
+        </div>
+      </div>
+ 
+      <!-- Category + Mode toolbar -->
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+        <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;">
+          ${['bangla','latin','all'].map((c,i) => `
+            <button class="fp-cat-btn${i===0?' active':''}" data-cat="${c}">
+              ${c==='bangla'?'🇧🇩 বাংলা':c==='latin'?'🔤 Latin':'⚡ সব'}
+            </button>`).join('')}
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);cursor:pointer;">
+          <input type="checkbox" id="fp-compare" style="accent-color:var(--accent);"> Compare mode
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);cursor:pointer;margin-left:auto;">
+          <input type="checkbox" id="fp-dark-bg" style="accent-color:var(--accent);"> Dark background
+        </label>
+      </div>
+ 
+      <!-- Font grid -->
+      <div id="fp-font-grid"></div>
+ 
+      <!-- Compare panel (hidden by default) -->
+      <div id="fp-compare-panel" style="display:none;margin-top:16px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <p style="font-size:12px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;">
+            তুলনা (<span id="fp-compare-count">0</span>টি font নির্বাচিত)
+          </p>
+          <button class="btn btn-ghost btn-sm" id="fp-clear-compare">Clear</button>
+        </div>
+        <div id="fp-compare-grid"></div>
+      </div>
+ 
+    </div>
+  `;
+ 
+  // ── Styles ──
+  const style = document.createElement('style');
+  style.textContent = `
+    .fp-cat-btn { padding:6px 14px;font-size:12.5px;font-family:var(--font-ui);
+      background:transparent;border:none;color:var(--text2);cursor:pointer;
+      transition:all var(--trans);border-right:1px solid var(--border); }
+    .fp-cat-btn:last-child { border-right:none; }
+    .fp-cat-btn.active { background:var(--accent-dim);color:var(--accent2);font-weight:500; }
+    .fp-cat-btn:hover:not(.active) { background:var(--surface2); }
+ 
+    .fp-ctrl-group { display:flex;flex-direction:column;gap:4px; }
+    .fp-ctrl-label { font-size:11px;color:var(--text3);display:flex;justify-content:space-between; }
+ 
+    .fp-font-card { background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);
+      overflow:hidden;transition:border-color var(--trans);margin-bottom:10px; }
+    .fp-font-card:hover { border-color:var(--border2); }
+    .fp-font-card.selected { border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-dim); }
+ 
+    .fp-font-meta { display:flex;align-items:center;gap:10px;padding:10px 14px;
+      border-bottom:1px solid var(--border);background:var(--bg2); }
+    .fp-font-name { font-size:13px;font-weight:500;color:var(--text); }
+    .fp-font-tag { font-size:10.5px;padding:2px 8px;border-radius:20px;
+      background:var(--surface2);color:var(--text3); }
+    .fp-font-style { font-size:11.5px;color:var(--text3);flex:1; }
+    .fp-font-actions { display:flex;gap:6px; }
+    .fp-action-btn { font-size:11.5px;padding:4px 10px;border:1px solid var(--border);
+      border-radius:var(--radius-sm);background:transparent;color:var(--text2);
+      cursor:pointer;font-family:var(--font-ui);transition:all var(--trans); }
+    .fp-action-btn:hover { border-color:var(--accent);color:var(--accent2); }
+    .fp-action-btn.sel { background:var(--accent-dim);border-color:var(--accent);color:var(--accent2); }
+ 
+    .fp-preview-area { padding:20px 22px;transition:background var(--trans); }
+    .fp-preview-area.dark-bg { background:#111318; }
+    .fp-preview-text { transition:all var(--trans);word-break:break-word; }
+ 
+    .fp-loading { display:flex;align-items:center;gap:8px;padding:20px;
+      color:var(--text3);font-size:13px; }
+    .fp-loading-spinner { width:16px;height:16px;border:2px solid var(--border);
+      border-top-color:var(--accent);border-radius:50%;animation:fp-spin .7s linear infinite; }
+    @keyframes fp-spin { to { transform:rotate(360deg); } }
+ 
+    .fp-weights-row { display:flex;gap:6px;flex-wrap:wrap;padding:10px 14px;
+      border-top:1px solid var(--border);background:var(--bg2); }
+    .fp-weight-chip { font-size:11px;padding:3px 10px;border:1px solid var(--border);
+      border-radius:20px;cursor:pointer;background:transparent;color:var(--text3);
+      font-family:var(--font-ui);transition:all var(--trans); }
+    .fp-weight-chip.active { background:var(--accent-dim);border-color:var(--accent);color:var(--accent2); }
+    .fp-weight-chip:hover:not(.active) { border-color:var(--border2);color:var(--text); }
+ 
+    .fp-sample-btn { font-size:12px;padding:4px 12px;border:1px solid var(--border);
+      border-radius:20px;background:var(--surface2);color:var(--text2);cursor:pointer;
+      font-family:var(--font-bangla);transition:all var(--trans); }
+    .fp-sample-btn:hover { border-color:var(--border2);color:var(--text); }
+    .fp-sample-btn.active { background:var(--accent-dim);border-color:var(--accent);color:var(--accent2); }
+ 
+    .fp-css-block { font-family:var(--font-mono);font-size:12px;color:var(--accent2);
+      background:var(--bg);padding:10px 14px;border-radius:var(--radius-sm);
+      border:1px solid var(--border);margin-top:8px;white-space:pre;overflow-x:auto; }
+  `;
+  container.appendChild(style);
+  container.appendChild(el);
+ 
+  // ── Sample text buttons ──
+  const samplesEl = el.querySelector('#fp-samples');
+  let activeSampleBtn = null;
+ 
+  function addSampleGroup(samples) {
+    samples.forEach(s => {
+      const btn = document.createElement('button');
+      btn.className = 'fp-sample-btn';
+      btn.textContent = s.label;
+      btn.addEventListener('click', () => {
+        previewText = s.text;
+        el.querySelector('#fp-custom-text').value = s.text;
+        samplesEl.querySelectorAll('.fp-sample-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderAllPreviews();
+      });
+      samplesEl.appendChild(btn);
+    });
+  }
+ 
+  addSampleGroup(SAMPLE_TEXTS.bangla);
+  addSampleGroup(SAMPLE_TEXTS.latin);
+  addSampleGroup(SAMPLE_TEXTS.mixed);
+ 
+  // Mark first as active
+  samplesEl.querySelector('.fp-sample-btn')?.classList.add('active');
+ 
+  // ── Custom text ──
+  el.querySelector('#fp-custom-text').value = previewText;
+  el.querySelector('#fp-custom-text').addEventListener('input', e => {
+    previewText = e.target.value;
+    samplesEl.querySelectorAll('.fp-sample-btn').forEach(b => b.classList.remove('active'));
+    renderAllPreviews();
+  });
+ 
+  // ── Controls ──
+  el.querySelector('#fp-size').addEventListener('input', e => {
+    fontSize = parseInt(e.target.value);
+    el.querySelector('#fp-size-val').textContent = fontSize + 'px';
+    renderAllPreviews();
+  });
+  el.querySelector('#fp-weight').addEventListener('input', e => {
+    fontWeight = parseInt(e.target.value);
+    el.querySelector('#fp-weight-val').textContent = fontWeight;
+    renderAllPreviews();
+  });
+  el.querySelector('#fp-lh').addEventListener('input', e => {
+    lineHeight = parseFloat(e.target.value);
+    el.querySelector('#fp-lh-val').textContent = lineHeight.toFixed(1);
+    renderAllPreviews();
+  });
+  el.querySelector('#fp-ls').addEventListener('input', e => {
+    letterSpacing = parseFloat(e.target.value);
+    el.querySelector('#fp-ls-val').textContent = letterSpacing + 'px';
+    renderAllPreviews();
+  });
+ 
+  // ── Category filter ──
+  el.querySelectorAll('.fp-cat-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeCategory = btn.dataset.cat;
+      el.querySelectorAll('.fp-cat-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === activeCategory));
+      renderFontGrid();
+    });
+  });
+ 
+  // ── Dark bg ──
+  el.querySelector('#fp-dark-bg').addEventListener('change', e => {
+    darkBg = e.target.checked;
+    el.querySelectorAll('.fp-preview-area').forEach(a => a.classList.toggle('dark-bg', darkBg));
+  });
+ 
+  // ── Compare mode ──
+  el.querySelector('#fp-compare').addEventListener('change', e => {
+    compareMode = e.target.checked;
+    if (!compareMode) {
+      selectedFonts.clear();
+      el.querySelector('#fp-compare-panel').style.display = 'none';
+    }
+    renderFontGrid();
+  });
+ 
+  el.querySelector('#fp-clear-compare').addEventListener('click', () => {
+    selectedFonts.clear();
+    el.querySelector('#fp-compare-count').textContent = '0';
+    el.querySelector('#fp-compare-grid').innerHTML = '';
+    el.querySelector('#fp-compare-panel').style.display = 'none';
+    el.querySelectorAll('.fp-action-btn.sel').forEach(b => b.classList.remove('sel'));
+  });
+ 
+  // ── Font grid rendering ──
+  function getFilteredFonts() {
+    if (activeCategory === 'bangla') return BANGLA_FONTS;
+    if (activeCategory === 'latin') return LATIN_FONTS;
+    return ALL_FONTS;
+  }
+ 
+  function renderFontGrid() {
+    const grid = el.querySelector('#fp-font-grid');
+    grid.innerHTML = '';
+    getFilteredFonts().forEach(font => {
+      grid.appendChild(buildFontCard(font));
+    });
+  }
+ 
+  function buildFontCard(font) {
+    const card = document.createElement('div');
+    card.className = 'fp-font-card' + (selectedFonts.has(font.id) ? ' selected' : '');
+    card.id = 'fp-card-' + font.id;
+ 
+    const isLoaded = isFontLoaded(font.id);
+ 
+    card.innerHTML = `
+      <div class="fp-font-meta">
+        <div style="flex:1;">
+          <p class="fp-font-name">${font.name}</p>
+          <p class="fp-font-style">${font.style}</p>
+        </div>
+        <span class="fp-font-tag">${font.category}</span>
+        <div class="fp-font-actions">
+          <button class="fp-action-btn fp-css-btn" data-font="${font.id}" title="CSS copy করো">CSS</button>
+          ${compareMode
+            ? `<button class="fp-action-btn fp-sel-btn${selectedFonts.has(font.id) ? ' sel' : ''}"
+                data-font="${font.id}">${selectedFonts.has(font.id) ? '✓ Selected' : '+ Compare'}</button>`
+            : ''}
+        </div>
+      </div>
+      <div class="fp-preview-area${darkBg ? ' dark-bg' : ''}" id="fp-preview-${font.id}">
+        ${isLoaded
+          ? `<p class="fp-preview-text" id="fp-text-${font.id}" style="
+              font-family:${font.family};
+              font-size:${fontSize}px;
+              font-weight:${fontWeight};
+              line-height:${lineHeight};
+              letter-spacing:${letterSpacing}px;
+              color:${darkBg ? '#f0f1f3' : 'var(--text)'};
+              white-space:pre-wrap;
+            ">${previewText}</p>`
+          : `<div class="fp-loading" id="fp-loading-${font.id}">
+              <div class="fp-loading-spinner"></div>
+              <span>Font লোড হচ্ছে…</span>
+            </div>`
+        }
+      </div>
+      ${font.weights.length > 1
+        ? `<div class="fp-weights-row">
+            <span style="font-size:11px;color:var(--text3);margin-right:4px;">Weights:</span>
+            ${font.weights.map(w => `
+              <button class="fp-weight-chip${w === fontWeight ? ' active' : ''}"
+                data-font="${font.id}" data-weight="${w}">${w}</button>`).join('')}
+          </div>`
+        : ''}
+    `;
+ 
+    // Load font if needed
+    if (!isLoaded) {
+      loadFont(font).then(() => {
+        const loadingEl = card.querySelector(`#fp-loading-${font.id}`);
+        const areaEl    = card.querySelector(`#fp-preview-${font.id}`);
+        if (loadingEl && areaEl) {
+          areaEl.innerHTML = `<p class="fp-preview-text" id="fp-text-${font.id}" style="
+            font-family:${font.family};font-size:${fontSize}px;font-weight:${fontWeight};
+            line-height:${lineHeight};letter-spacing:${letterSpacing}px;
+            color:${darkBg?'#f0f1f3':'var(--text)'};white-space:pre-wrap;
+          ">${previewText}</p>`;
+        }
+      });
+    }
+ 
+    // CSS copy
+    card.querySelector('.fp-css-btn').addEventListener('click', () => {
+      const css = buildCSS(font);
+      showCSSPanel(card, font, css);
+    });
+ 
+    // Compare select
+    if (compareMode) {
+      card.querySelector('.fp-sel-btn')?.addEventListener('click', btn => {
+        const fontId = btn.currentTarget.dataset.font;
+        if (selectedFonts.has(fontId)) {
+          selectedFonts.delete(fontId);
+          btn.currentTarget.classList.remove('sel');
+          btn.currentTarget.textContent = '+ Compare';
+          card.classList.remove('selected');
+        } else {
+          selectedFonts.add(fontId);
+          btn.currentTarget.classList.add('sel');
+          btn.currentTarget.textContent = '✓ Selected';
+          card.classList.add('selected');
+        }
+        updateComparePanel();
+      });
+    }
+ 
+    // Weight chips
+    card.querySelectorAll('.fp-weight-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const w = parseInt(chip.dataset.weight);
+        card.querySelectorAll('.fp-weight-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        const textEl = card.querySelector(`#fp-text-${font.id}`);
+        if (textEl) textEl.style.fontWeight = w;
+      });
+    });
+ 
+    return card;
+  }
+ 
+  function buildCSS(font) {
+    return `/* ${font.name} */
+@import url('https://fonts.googleapis.com/css2?family=${font.googleFont}&display=swap');
+ 
+body {
+  font-family: ${font.family};
+  font-size: ${fontSize}px;
+  font-weight: ${fontWeight};
+  line-height: ${lineHeight};
+  letter-spacing: ${letterSpacing}px;
+}`;
+  }
+ 
+  function showCSSPanel(card, font, css) {
+    // Remove any existing CSS panel in this card
+    card.querySelector('.fp-css-block')?.remove();
+    const block = document.createElement('pre');
+    block.className = 'fp-css-block';
+    block.textContent = css;
+    block.title = 'Click to copy';
+    block.style.cursor = 'pointer';
+    block.addEventListener('click', () => {
+      navigator.clipboard.writeText(css).then(() => showToast('CSS copied!'));
+    });
+    card.appendChild(block);
+    block.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+ 
+  function updateComparePanel() {
+    const count = selectedFonts.size;
+    el.querySelector('#fp-compare-count').textContent = count;
+    const panel = el.querySelector('#fp-compare-panel');
+    const grid  = el.querySelector('#fp-compare-grid');
+ 
+    if (count === 0) { panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+ 
+    grid.innerHTML = '';
+    selectedFonts.forEach(fontId => {
+      const font = ALL_FONTS.find(f => f.id === fontId);
+      if (!font) return;
+      const row = document.createElement('div');
+      row.style.cssText = 'margin-bottom:10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;';
+      row.innerHTML = `
+        <div style="padding:8px 14px;background:var(--bg2);border-bottom:1px solid var(--border);
+          display:flex;align-items:center;gap:8px;">
+          <span style="font-size:13px;font-weight:500;color:var(--text);">${font.name}</span>
+          <span style="font-size:11px;padding:2px 8px;border-radius:20px;background:var(--surface2);color:var(--text3);">${font.category}</span>
+        </div>
+        <div class="fp-preview-area${darkBg?' dark-bg':''}" style="padding:16px 18px;">
+          <p style="font-family:${font.family};font-size:${fontSize}px;font-weight:${fontWeight};
+            line-height:${lineHeight};letter-spacing:${letterSpacing}px;
+            color:${darkBg?'#f0f1f3':'var(--text)'};white-space:pre-wrap;">${previewText}</p>
+        </div>
+      `;
+      loadFont(font).then(() => {});
+      grid.appendChild(row);
+    });
+  }
+ 
+  function renderAllPreviews() {
+    el.querySelectorAll('.fp-preview-text').forEach(textEl => {
+      textEl.textContent = previewText;
+      textEl.style.fontSize      = fontSize + 'px';
+      textEl.style.fontWeight    = fontWeight;
+      textEl.style.lineHeight    = lineHeight;
+      textEl.style.letterSpacing = letterSpacing + 'px';
+      textEl.style.color         = darkBg ? '#f0f1f3' : 'var(--text)';
+    });
+    // Also update compare panel
+    if (selectedFonts.size > 0) updateComparePanel();
+  }
+ 
+  // ── Initial render ──
+  renderFontGrid();
+ 
+  // Pre-load all visible Bangla fonts for faster first experience
+  loadAllFonts(BANGLA_FONTS).then(() => renderFontGrid());
 }
 
 // ─── Theme Toggle ─────────────────────────────────────────────────────────────
