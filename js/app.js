@@ -1,8 +1,15 @@
+// ─── Spell Checker Renderer ───────────────────────────────────────────────
+function renderSpellChecker(container) {
+  container.innerHTML = `
+    <iframe src="spell-checker.html" style="width:100%;min-height:700px;border:none;border-radius:12px;background:#181a20;" allowfullscreen loading="lazy"></iframe>
+  `;
+}
 /**
  * Bangla Text Tools Suite — Main App
  * Handles routing, sidebar, and tool rendering
  */
-
+import { ROUTER } from './router.js';
+import { STATE_ROUTER } from './state-router.js';  // ← NEW
 import { bijoyToUnicode, getStats as b2uStats, SAMPLES as b2uSamples } from './tools/bijoy-to-unicode.js';
 import { unicodeToBijoy, getStats as u2bStats, SAMPLES as u2bSamples } from './tools/unicode-to-bijoy.js';
 import { avroToUnicode, getStats as avroStats, SAMPLES as avroSamples, QUICK_REFS } from './tools/avro-phonetic.js';
@@ -21,11 +28,13 @@ import { reverseText, MODES as reverseModes, getStats as revStats, checkPalindro
 import { sortLines, SORT_MODES, getStats as sortStats, SAMPLES as sortSamples } from './tools/line-sorter.js';
 import { truncateText, truncateWithPreset, getTextInfo, PRESETS as truncPresets, SAMPLES as truncSamples } from './tools/text-truncator.js';
 import { TEMPLATE_CATEGORIES, SAMPLES as templateSamples } from './tools/smart-templates.js';
-import { CONVERSION_TYPES, batchProcess, getStats, SAMPLES as batchSamples, CUSTOM_PRESETS } from './tools/batch-number-converter.js';
+import { CONVERSION_TYPES, batchProcess, getStats as batchStats, SAMPLES as batchSamples, CUSTOM_PRESETS } from './tools/batch-number-converter.js';
 import { findMatches, replaceText, batchReplace, buildHighlightedHtml, SAMPLES as frSamples } from './tools/find-replace.js';
 import { generateLoremBangla, THEMES as loremThemes, PRESETS as loremPresets } from './tools/lorem-bangla.js';
 import { fixPunctuation, fixWithPreset, FIXES, PRESETS as punctPresets, CATEGORIES as punctCats, SAMPLES as punctSamples } from './tools/punctuation-fixer.js';
 import {BANGLA_FONTS, LATIN_FONTS, ALL_FONTS,SAMPLE_TEXTS, loadFont, loadAllFonts, isFontLoaded,} from './tools/font-previewer.js';
+import { smartConvert as banglishConvert, getStats as banglishStats, SAMPLES as banglishSamples } from './tools/banglish-converter.js';
+import { checkWord, checkText, addWord, removeWord, getStats, getSuggestions, SAMPLES } from './tools/spell-checker.js';
 
 // ─── Tool Definitions ───────────────────────────────────────────────────────
 const TOOLS = [
@@ -222,6 +231,24 @@ const TOOLS = [
    desc: 'বাংলা ও Latin font preview ও compare করো',
    badge: 'NEW',
  },
+ // ← NEW: Banglish Smart Converter
+  {
+    id: 'banglish-converter',
+    name: 'Banglish → Unicode',
+    desc: 'Smart Banglish (Roman Bengali) to Unicode converter with 500+ word dictionary',
+    icon: '🇧🇩',
+    category: 'conversion',
+    badge: 'NEW'
+  },
+  {
+    id: 'spell-checker',
+    name: 'বানান পরীক্ষক',
+    icon: '✅',
+    tag: 'unicode',
+    category: 'analysis',
+    desc: 'বাংলা বানান পরীক্ষা এবং সংশোধন — স্মার্ট সাজেশন সহ',
+    badge: 'NEW',
+},
 
 ];
 
@@ -270,16 +297,20 @@ function buildSidebar() {
   sect1.className = 'nav-section';
   sect1.innerHTML = `<p class="nav-section-label">Conversion</p>`;
   TOOLS.forEach(tool => {
-    const btn = document.createElement('button');
-    btn.className = 'nav-item' + (tool.id === currentTool ? ' active' : '');
-    btn.dataset.tool = tool.id;
-    btn.innerHTML = `
+    const a = document.createElement('a');
+    a.className = 'nav-item' + (tool.id === currentTool ? ' active' : '');
+    a.href = `#/${tool.id}`;
+    a.dataset.tool = tool.id;
+    a.innerHTML = `
       <span class="nav-icon">${tool.icon}</span>
-      <span>${tool.name}</span>
+      <span class="nav-text">${tool.name}</span>
       ${tool.badge ? `<span class="nav-badge">${tool.badge}</span>` : ''}
     `;
-    btn.addEventListener('click', () => activateTool(tool.id));
-    sect1.appendChild(btn);
+    // Mobile sidebar close on click (hashchange will handle the actual routing)
+    a.addEventListener('click', () => {
+      setTimeout(closeMobileSidebar, 0);
+    });
+    sect1.appendChild(a);
   });
   nav.appendChild(sect1);
 
@@ -304,12 +335,11 @@ function activateTool(id) {
   currentTool = id;
   buildSidebar();
   renderTool(id);
-  // Update topbar
   const tool = TOOLS.find(t => t.id === id);
   $('topbar-title').textContent = tool.name;
   $('topbar-desc').textContent = tool.desc;
-  // Close mobile sidebar
   closeMobileSidebar();
+  STATE_ROUTER.setState(id);   // ← URL hash update (idempotent — loop create করে না)
 }
 
 // ─── Mobile Sidebar ───────────────────────────────────────────────────────────
@@ -323,6 +353,133 @@ function closeMobileSidebar() {
   $('sidebar-overlay').classList.remove('open');
   document.body.style.overflow = '';
 }
+
+function renderBanglishConverter(container) {
+  // Check for shared state in URL
+  const state = STATE_ROUTER.getState();
+  const sharedText = state && state.toolId === 'banglish-converter' ? state.text : '';
+
+  const inputId = 'banglish-input';
+  const outputId = 'banglish-output';
+  const statsId = 'banglish-stats';
+
+  container.innerHTML = `
+    <div class="tool-layout">
+      <div class="input-area">
+        <div class="area-header">
+          <span class="area-title">Banglish Text (Type in Roman)</span>
+          <div class="area-actions">
+            <button class="btn-icon" onclick="loadBanglishSample()" title="Load sample">📝</button>
+            <button class="btn-icon" onclick="clearBanglish()" title="Clear">🗑️</button>
+          </div>
+        </div>
+        <textarea id="${inputId}" class="text-input" placeholder="Type Banglish here... e.g. ami valo achi" spellcheck="false">${sharedText}</textarea>
+        <div class="area-footer">
+          <span id="${statsId}">0 words</span>
+          <button class="btn-swap" onclick="convertBanglish()">Convert →</button>
+        </div>
+      </div>
+
+      <div class="output-area">
+        <div class="area-header">
+          <span class="area-title">Unicode Bengali</span>
+          <div class="area-actions">
+            <button class="btn-icon" onclick="copyBanglishOutput()" title="Copy">📋</button>
+            <button class="btn-icon" onclick="shareBanglish()" title="Share link">🔗</button>
+          </div>
+        </div>
+        <textarea id="${outputId}" class="text-output" readonly placeholder="Unicode output will appear here..."></textarea>
+        <div class="area-footer">
+          <span>Click Convert or type to auto-convert</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-panel">
+      <h4>💡 How it works</h4>
+      <p>Type Banglish (Romanized Bengali) and it will smart-convert to Unicode Bengali.</p>
+      <p>Supports: <strong>500+ common words</strong> + phonetic fallback for unknown words.</p>
+      <p>Examples: <code>ami</code> → আমি, <code>valo</code> → ভালো, <code>dhaka</code> → ঢাকা</p>
+    </div>
+  `;
+
+  // Auto-convert if shared text exists
+  if (sharedText) {
+    setTimeout(convertBanglish, 100);
+  }
+
+  // Live conversion on input
+  const input = $(inputId);
+  let debounceTimer;
+  input.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      convertBanglish();
+      // Update URL state silently
+      STATE_ROUTER.setState('banglish-converter', input.value);
+    }, 300);
+  });
+}
+
+
+// ─── Banglish Converter Helper Functions ───
+
+function convertBanglish() {
+  const input = $('banglish-input');
+  const output = $('banglish-output');
+  const statsEl = $('banglish-stats');
+
+  if (!input || !output) return;
+
+  const text = input.value;
+  const converted = banglishConvert(text);
+  output.value = converted;
+
+  const stats = banglishStats(text, converted);
+  statsEl.textContent = `${stats.inputWords} words | ${stats.confidence}% confidence | ${stats.convertedWords}/${stats.banglishWords} converted`;
+
+  // Update URL with current state
+  STATE_ROUTER.setState('banglish-converter', text);
+}
+
+function loadBanglishSample() {
+  const input = $('banglish-input');
+  const samples = banglishSamples;
+  const random = samples[Math.floor(Math.random() * samples.length)];
+  input.value = random;
+  convertBanglish();
+}
+
+function clearBanglish() {
+  const input = $('banglish-input');
+  const output = $('banglish-output');
+  input.value = '';
+  output.value = '';
+  $('banglish-stats').textContent = '0 words';
+  STATE_ROUTER.setState('banglish-converter', '');
+}
+
+// Make copyBanglishOutput globally accessible for onclick
+window.copyBanglishOutput = function() {
+  const output = $('banglish-output');
+  if (output && output.value) {
+    navigator.clipboard.writeText(output.value);
+    showToast('Copied to clipboard!');
+  }
+};
+
+
+// Make shareBanglish globally accessible for onclick
+window.shareBanglish = async function() {
+  const input = $('banglish-input');
+  const text = input ? input.value : '';
+
+  const success = await STATE_ROUTER.copyShareableLink('banglish-converter', text);
+  if (success) {
+    showToast('Shareable link copied! Paste anywhere.');
+  }
+};
+
 
 // ─── Tool Renderers ───────────────────────────────────────────────────────────
 function renderTool(id) {
@@ -352,6 +509,8 @@ function renderTool(id) {
   else if (id === 'lorem-bangla')       renderLoremBangla(view);
   else if (id === 'punctuation-fixer')  renderPunctuationFixer(view);
   else if (id === 'font-previewer')     renderFontPreviewer(view);
+  else if (id === 'banglish-converter') renderBanglishConverter(view);
+  else if (id === 'spell-checker')      renderSpellChecker(view);
   else view.innerHTML = `<p>Tool not found.</p>`;
 }
 
@@ -3332,7 +3491,7 @@ function renderBatchNumberConverter(container) {
       statsSpan.textContent = '';
       return;
     }
-    const stats = getStats(originalText, processedText);
+    const stats = batchStats(originalText, processedText);
     statsSpan.textContent = `${stats.inputLines} লাইন প্রসেস → ${stats.outputLines} আউটপুট`;
   }
 
@@ -4450,15 +4609,29 @@ function updateThemeBtn(theme) {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
+
+  // ← UPDATE: Use STATE_ROUTER.init with state support
+  STATE_ROUTER.init((toolId, sharedText) => {
+    const tool = TOOLS.find(t => t.id === toolId);
+    if (tool) {
+      currentTool = toolId;
+      buildSidebar();
+      renderTool(toolId);  // renderTool will handle sharedText
+      $('topbar-title').textContent = tool.name;
+      $('topbar-desc').textContent = tool.desc;
+    } else {
+      activateTool(TOOLS[0].id);
+    }
+  });
+
   buildSidebar();
-  renderTool(currentTool);
 
-  // Set initial topbar
-  const first = TOOLS[0];
-  $('topbar-title').textContent = first.name;
-  $('topbar-desc').textContent = first.desc;
+  // If no hash in URL, activate default
+  if (!STATE_ROUTER.getState()) {
+    activateTool(currentTool);
+  }
 
-  // Mobile menu
+  // Event listeners...
   $('menu-btn').addEventListener('click', openMobileSidebar);
   $('sidebar-overlay').addEventListener('click', closeMobileSidebar);
   $('theme-btn').addEventListener('click', toggleTheme);

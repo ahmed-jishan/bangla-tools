@@ -1,0 +1,495 @@
+window.ignore = ignore;
+window.ignore = ignore;
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bangla Spell Checker</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0f1115;
+    color: #e8eaf0;
+    min-height: 100vh;
+    padding: 20px;
+}
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+    background: #181a20;
+    border: 1px solid #2a2e3a;
+    border-radius: 16px;
+    overflow: hidden;
+}
+.header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 30px;
+    text-align: center;
+}
+.header h1 { font-size: 2em; margin-bottom: 8px; }
+.header p { opacity: 0.9; }
+.content { padding: 30px; }
+
+/* Input area */
+.input-box {
+    margin-bottom: 20px;
+}
+.samples {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.sample-chip {
+    padding: 6px 14px;
+    border: 1px solid #3f4554;
+    border-radius: 20px;
+    background: #1e2129;
+    color: #a0a6b1;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+.sample-chip:hover {
+    border-color: #667eea;
+    color: #667eea;
+}
+textarea {
+    width: 100%;
+    padding: 15px;
+    border: 2px solid #2a2e3a;
+    border-radius: 10px;
+    font-size: 1.1em;
+    font-family: 'Noto Sans Bengali', 'Segoe UI', sans-serif;
+    min-height: 150px;
+    resize: vertical;
+    background: #1e2129;
+    color: #e8eaf0;
+    transition: border-color 0.3s;
+}
+textarea:focus {
+    outline: none;
+    border-color: #667eea;
+}
+.btns {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1em;
+    font-family: inherit;
+    transition: all 0.3s;
+}
+.btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(102,126,234,0.4);
+}
+.btn-secondary {
+    background: #1e2129;
+    color: #a0a6b1;
+    border: 1px solid #3f4554;
+}
+.btn-secondary:hover {
+    background: #252830;
+}
+
+/* Results */
+.results {
+    display: none;
+    background: #1e2129;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid #2a2e3a;
+}
+.summary {
+    background: #181a20;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    border-left: 4px solid #f87171;
+    font-size: 1.1em;
+}
+.summary span {
+    color: #f87171;
+    font-weight: bold;
+}
+.highlight-box {
+    background: #181a20;
+    padding: 20px;
+    border-radius: 8px;
+    line-height: 1.8;
+    font-size: 1.1em;
+    margin-bottom: 15px;
+    border: 1px solid #2a2e3a;
+    white-space: pre-wrap;
+    font-family: 'Noto Sans Bengali', sans-serif;
+}
+.error-word {
+    background: rgba(248,113,113,0.15);
+    border-bottom: 2px wavy #f87171;
+    padding: 0 2px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.error-word:hover {
+    background: rgba(248,113,113,0.25);
+}
+
+/* Error list */
+.error-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.error-item {
+    background: #181a20;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #f87171;
+}
+.error-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 1.1em;
+}
+.error-header .mark { color: #f87171; font-weight: bold; }
+.error-header .type { color: #6b7280; font-size: 0.85em; }
+.suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.sug-btn {
+    padding: 5px 12px;
+    border: 1px solid #667eea;
+    border-radius: 20px;
+    background: rgba(102,126,234,0.1);
+    color: #667eea;
+    font-size: 0.95em;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+.sug-btn:hover {
+    background: #667eea;
+    color: white;
+}
+.ignore-btn {
+    padding: 5px 12px;
+    border: 1px solid #fbbf24;
+    border-radius: 20px;
+    background: rgba(251,191,36,0.1);
+    color: #fbbf24;
+    font-size: 0.9em;
+    cursor: pointer;
+}
+.ignore-btn:hover {
+    background: #fbbf24;
+    color: #0f1115;
+}
+.success-msg {
+    text-align: center;
+    padding: 30px;
+    color: #34d399;
+    font-size: 1.2em;
+}
+
+/* Dictionary */
+.dict-box {
+    background: #1e2129;
+    padding: 20px;
+    border-radius: 10px;
+    border: 1px solid #2a2e3a;
+}
+.dict-box h3 {
+    margin-bottom: 15px;
+    color: #e8eaf0;
+}
+.add-form {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+.add-form input {
+    flex: 1;
+    padding: 10px 15px;
+    border: 2px solid #2a2e3a;
+    border-radius: 8px;
+    font-size: 1em;
+    font-family: 'Noto Sans Bengali', sans-serif;
+    background: #181a20;
+    color: #e8eaf0;
+}
+.add-form input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+.word-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.tag {
+    background: #181a20;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.9em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid #2a2e3a;
+}
+.tag button {
+    background: rgba(248,113,113,0.15);
+    color: #f87171;
+    border: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 0.8em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+.tag button:hover {
+    background: #f87171;
+    color: white;
+}
+.stats-bar {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+.stats-bar span {
+    background: #1e2129;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.85em;
+    color: #6b7280;
+    border: 1px solid #2a2e3a;
+}
+
+@media (max-width: 600px) {
+    .btns { flex-direction: column; }
+    .btn { width: 100%; justify-content: center; }
+    .add-form { flex-direction: column; }
+}
+</style>
+<base target="_blank">
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>বাংলা বানান পরীক্ষক</h1>
+        <p>Bangla Spell Checker - Smart Suggestions</p>
+    </div>
+    <div class="content">
+        <div class="stats-bar" id="stats"></div>
+
+        <div class="input-box">
+            <div class="samples" id="samples"></div>
+            <textarea id="input" placeholder="এখানে বাংলা টেক্সট লিখুন..."></textarea>
+            <div class="btns">
+                <button class="btn btn-primary" onclick="check()">
+                    বানান পরীক্ষা করুন
+                </button>
+                <button class="btn btn-secondary" onclick="clearAll()">
+                    পরিষ্কার করুন
+                </button>
+            </div>
+        </div>
+
+        <div class="results" id="results">
+            <div class="summary" id="summary"></div>
+            <div class="highlight-box" id="highlight"></div>
+            <div class="error-list" id="errors"></div>
+        </div>
+
+        <div class="dict-box">
+            <div id="toast" style="display:none;position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:14px 32px;border-radius:8px;font-size:1.1em;z-index:9999;box-shadow:0 2px 12px #0002;transition:opacity 0.3s;"></div>
+            <h3>ব্যক্তিগত অভিধান</h3>
+            <div class="add-form">
+                <input type="text" id="newWord" placeholder="নতুন শব্দ..." 
+                    onkeypress="if(event.key==='Enter')addWordLocal()">
+                <button class="btn btn-secondary" onclick="addWordLocal()">যোগ করুন</button>
+            </div>
+            <div class="word-tags" id="tags"></div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+import { addWord, removeWord, checkWord, checkText, getStats } from './js/tools/spell-checker.js';
+const samples = [
+    {l:'✓ সঠিক', t:'আমি বাংলাদেশের নাগরিক। আমার দেশের নাম বাংলাদেশ।'},
+    {l:'✗ ভুল', t:'আমি বাংলাদশের নাগরিক। আমার দেশের নাম বাংলাদেশ।'},
+    {l:'✗ যুক্তাক্ষর', t:'স্কুলে গিয়ে পড়াশুনা করি। আমার বন্ধু অনেক ভালো।'},
+    {l:'✗ স্বরবর্ণ', t:'আমার মা অনেক ভালবাসেন। আমি তাকে অনেক ভালবাসি।'}
+];
+
+// Load samples
+const sbox = document.getElementById('samples');
+samples.forEach(s => {
+    const b = document.createElement('button');
+    b.className = 'sample-chip';
+    b.textContent = s.l;
+    b.onclick = () => { document.getElementById('input').value = s.t; check(); };
+    sbox.appendChild(b);
+});
+
+function updateStats() {
+    const st = getStats();
+    document.getElementById('stats').innerHTML = 
+        '<span>মোট: '+st.total+'</span>'+
+        '<span>কোর: '+st.core+'</span>'+
+        '<span>কাস্টম: '+st.custom+'</span>';
+}
+
+function updateTags() {
+    const box = document.getElementById('tags');
+    box.innerHTML = '';
+    // Assuming getStats() returns custom words as an array
+    const st = getStats();
+    if (st.customWords) {
+        st.customWords.forEach(w => {
+            const t = document.createElement('span');
+            t.className = 'tag';
+            t.innerHTML = w + '<button onclick="removeWordLocal(\''+w+'\')">×</button>';
+            box.appendChild(t);
+        });
+    }
+}
+
+function check() {
+    window.check = check;
+    const text = document.getElementById('input').value;
+    if (!text.trim()) return;
+
+    const r = checkText(text);
+    const res = document.getElementById('results');
+    res.style.display = 'block';
+
+    document.getElementById('summary').innerHTML = 
+        '<span>'+r.count+'</span>টি ভুল / <span>'+r.total+'</span>টি শব্দ';
+
+    // Highlight
+    let hl = text;
+    const errs = [...r.errors].sort((a,b) => b.start - a.start);
+    errs.forEach(e => {
+        hl = hl.substring(0,e.start) + 
+             '<span class="error-word">'+e.word+'</span>' + 
+             hl.substring(e.end);
+    });
+    document.getElementById('highlight').innerHTML = hl;
+
+    // Error list
+    const elist = document.getElementById('errors');
+    if (r.count) {
+        elist.innerHTML = r.errors.map((e,i) => `
+            <div class="error-item">
+                <div class="error-header">
+                    <span class="mark">✗</span>
+                    <strong>${e.word}</strong>
+                    <span class="type">(${typeLabel(e.type)})</span>
+                </div>
+                <div class="suggestions">
+                    ${e.sug.map(s => `<button class="sug-btn" onclick="replace('${e.word}','${s}')">${s}</button>`).join('')}
+                </div>
+                <button class="ignore-btn" onclick="ignore('${e.word}')">উপেক্ষা করুন</button>
+            </div>
+        `).join('');
+    } else {
+        elist.innerHTML = '<div class="success-msg">✓ কোনো ভুল পাওয়া যায়নি!</div>';
+    }
+}
+
+function typeLabel(t) {
+    return {vowel:'স্বরবর্ণ ভুল', conjunct:'যুক্তাক্ষর ভুল', spelling:'বানান ভুল', unknown:'অজানা'}[t] || t;
+}
+
+function replace(oldW, newW) {
+    const inp = document.getElementById('input');
+    inp.value = inp.value.replace(oldW, newW);
+    check();
+}
+
+function ignore(word) {
+    addWord(word);
+    updateStats();
+    updateTags();
+    check();
+    showToast('শব্দটি উপেক্ষা করা হয়েছে!');
+}
+
+function addWordLocal() {
+    const inp = document.getElementById('newWord');
+    const word = inp.value.trim();
+    if (word) {
+        addWord(word);
+        inp.value = '';
+        updateTags();
+        check();
+        updateStats();
+        showToast('শব্দটি যোগ হয়েছে!');
+    }
+}
+
+function showToast(msg) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.style.display = 'block';
+    toast.style.opacity = '1';
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => { toast.style.display = 'none'; }, 300);
+    }, 1500);
+}
+function removeWordLocal(word) {
+    removeWord(word);
+    updateStats();
+    updateTags();
+    check();
+}
+
+function clearAll() {
+    document.getElementById('input').value = '';
+    document.getElementById('results').style.display = 'none';
+}
+
+// --- Expose all handlers globally for HTML onclick ---
+window.addWordLocal = addWordLocal;
+window.removeWordLocal = removeWordLocal;
+window.clearAll = clearAll;
+window.ignore = ignore;
+
+// Real-time check
+let timer;
+document.getElementById('input').addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(check, 1000);
+});
+
+// Init
+updateStats();
+updateTags();
+</script>
+</body>
+</html>
